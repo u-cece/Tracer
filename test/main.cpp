@@ -34,7 +34,7 @@ int main()
     CookTorranceMaterial specularWhite(glm::vec3(0.73f), 0.1f, 1.5f);
 
     std::unique_ptr floor = std::make_unique<Plane>(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    floor->SetMaterial(specularWhite);
+    floor->SetMaterial(mirror);
     std::unique_ptr left = std::make_unique<Plane>(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
     left->SetMaterial(red);
     std::unique_ptr right = std::make_unique<Plane>(glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -72,7 +72,7 @@ int main()
     TracerConfiguration config{};
     config.system.nThreads = 6u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nRaysPerPixel = 65536u;
+    config.rayTrace.nRaysPerPixel = 16u;
     config.lens.fov = glm::radians(90.0f);
     //LensConfiguration::fromLensParams(config.lens, 0.035f, 0.022f, 1.0f, 12.0f);
     Tracer tracer(config);

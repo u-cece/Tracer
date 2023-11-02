@@ -33,7 +33,7 @@ void SimpleReflectiveMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayD
 
     pdf = 1.0f;
 
-    brdf = vec3(1.0f);
+    brdf = vec3(1.0f) / dot(sample, normal);
 }
 
 static float ndfGgx(float alpha, const glm::vec3& normal, const glm::vec3& half)
