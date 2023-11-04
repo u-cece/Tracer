@@ -29,12 +29,12 @@ int main()
     SimpleDiffuseMaterial green(glm::vec3(0.12f, 0.45f, 0.15f));
     SimpleEmissiveMaterial light(glm::vec3(0.73f), glm::vec3(10.0f));
 
-    SimpleReflectiveMaterial mirror;
-    CookTorranceMaterial specularRed(glm::vec3(0.65f, 0.05f, 0.05f), 0.1f, 1.5f);
-    CookTorranceMaterial specularWhite(glm::vec3(0.73f), 0.1f, 1.5f);
+    PerfectSpecularCoatedMaterial perfectSpecular(glm::vec3(0.73f), 1.5f);
+    SpecularCoatedMaterial specularRed(glm::vec3(0.65f, 0.05f, 0.05f), 0.1f, 1.5f);
+    SpecularCoatedMaterial specularWhite(glm::vec3(0.73f), 0.1f, 1.5f);
 
     std::unique_ptr floor = std::make_unique<Plane>(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    floor->SetMaterial(mirror);
+    floor->SetMaterial(specularWhite);
     std::unique_ptr left = std::make_unique<Plane>(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
     left->SetMaterial(red);
     std::unique_ptr right = std::make_unique<Plane>(glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -63,7 +63,7 @@ int main()
 
     Camera camera{};
     camera.yaw = glm::radians(0.0f);
-    camera.pitch = glm::radians(0.0f);
+    camera.pitch = glm::radians(-30.0f);
     camera.pos = glm::vec3(0.0f, 0.25f, -5.0f);
     Canvas canvas(WIDTH, HEIGHT, 3);
     Scene scene;
@@ -72,7 +72,7 @@ int main()
     TracerConfiguration config{};
     config.system.nThreads = 6u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nRaysPerPixel = 16u;
+    config.rayTrace.nRaysPerPixel = 1024u;
     config.lens.fov = glm::radians(90.0f);
     //LensConfiguration::fromLensParams(config.lens, 0.035f, 0.022f, 1.0f, 12.0f);
     Tracer tracer(config);

@@ -43,14 +43,24 @@ public:
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const override;
 };
 
-class CookTorranceMaterial : public Material
+class SpecularCoatedMaterial : public Material
 {
 public:
-    CookTorranceMaterial(const glm::vec3& albedo, float alpha, float ior) : albedo(albedo), alpha{alpha}, ior{ior} {}
+    SpecularCoatedMaterial(const glm::vec3& albedo, float alpha, float ior) : albedo(albedo), alpha{alpha}, ior{ior} {}
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const override;
 private:
     glm::vec3 albedo;
     float alpha;
+    float ior;
+};
+
+class PerfectSpecularCoatedMaterial : public Material
+{
+public:
+    PerfectSpecularCoatedMaterial(const glm::vec3& albedo, float ior) : albedo(albedo), ior{ior} {}
+    virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const override;
+private:
+    glm::vec3 albedo;
     float ior;
 };
 

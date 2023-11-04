@@ -24,12 +24,18 @@ void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir,
     brdf = albedo / pi<float>();
 }
 
+glm::vec3 calcMirroredRay(const glm::vec3& in, const glm::vec3& normal)
+{
+    using namespace glm;
+    vec3 b = dot(-in, normal) * normal;
+    return in + 2.0f * b;
+}
+
 void SimpleReflectiveMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
 
-    vec3 b = dot(-rayDir, normal) * normal;
-    sample = rayDir + 2.0f * b;
+    sample = calcMirroredRay(rayDir, normal);
 
     pdf = 1.0f;
 
@@ -40,12 +46,12 @@ static float ndfGgx(float alpha, const glm::vec3& normal, const glm::vec3& half)
 {
     using namespace glm;
 
-    float nh = dot(normal, half);
+    float cosine = dot(normal, half);
     float d = 0.0f;
-    if (nh <= 0.0f)
+    if (cosine <= 0.0f)
         return 0;
 
-    float in = nh * nh * (alpha * alpha - 1.0f) + 1.0f;
+    float in = cosine * cosine * (alpha * alpha - 1.0f) + 1.0f;
     d = alpha * alpha / (pi<float>() * in * in);
 
     return d;
@@ -86,7 +92,7 @@ static float fresnel(float n, float cosine)
     return (r_s + r_p) / 2.0f;
 }
 
-void CookTorranceMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
 
@@ -105,6 +111,26 @@ void CookTorranceMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, 
     float specular = d * g * f / (4.0f * dot(-rayDir, normal) * dot(sample, normal));
 
     brdf = (1.0f - f) * albedo / pi<float>() + specular;
+}
+
+void PerfectSpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+{
+    using namespace glm;
+
+    float f = fresnel(ior, dot(-rayDir, normal));
+
+    if (rng.Uniform() < f)
+    {
+        sample = calcMirroredRay(rayDir, normal);
+        pdf = 1.0f;
+        brdf = vec3(1.0f) / dot(sample, normal);
+        return;
+    }
+    
+    samplers::generateCosine(rng, sample, pdf);
+    sample = transformSampleToWorld(normal, sample);
+
+    brdf = albedo / pi<float>();
 }
 
 }

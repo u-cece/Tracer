@@ -50,6 +50,11 @@ inline void generateCosine(RNG& rng, glm::vec3& sample, float& pdf)
     pdf = cosTheta / pi<float>();
 }
 
+inline void generateGgx(RNG& rng, glm::vec3& sample, float& pdf)
+{
+    
+}
+
 }
 
 }
