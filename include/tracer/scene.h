@@ -18,17 +18,20 @@ struct HitResult
     glm::vec3 point;
     float distance;
     const Object* object;
+
+    SurfaceData surfaceData;
 };
 
 class Scene
 {
 public:
     Scene() {}
-    void AddObjects(std::ranges::input_range auto&& range)
+    template <std::ranges::input_range Range>
         requires (
             std::is_same_v<
-                std::ranges::range_value_t<decltype(range)>,
+                std::ranges::range_value_t<Range>,
                 std::unique_ptr<Object>>)
+    void AddObjects(Range&& range)
     {
         std::ranges::for_each(range, [this](std::unique_ptr<Object>& obj)
         {

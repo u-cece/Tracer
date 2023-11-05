@@ -2,6 +2,9 @@
 
 #include <array>
 #include <cassert>
+#include <chrono>
+#include <ctime>
+#include <print>
 #include <random>
 #include <ranges>
 #include <thread>
@@ -66,18 +69,15 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
             break;
         }
 
-        vec3 P = hit.point;
+        const SurfaceData& surface = hit.surfaceData;
+        vec3 point = hit.point;
+        vec3 normal = surface.normal;
+        vec3 biasedP = point + normal * config.rayTrace.bias;
 
-        SurfaceData data{};
-        hit.object->GetSurfaceData(P, data);
-
-        vec3 N = data.normal;
-        vec3 biasedP = P + N * config.rayTrace.bias;
-
-        const Material* material = data.material;
+        const Material* material = hit.surfaceData.material;
         vec3 emissive;
-        if (data.texCoords)
-            emissive = material->GetEmissivity(data.texCoords.value());
+        if (surface.texCoords)
+            emissive = material->GetEmissivity(surface.texCoords.value());
         else
             emissive = material->GetFallbackEmissivity();
 
@@ -86,8 +86,8 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         vec3 sample;
         float pdf;
         vec3 brdf;
-        material->SampleAndCalcBrdf(rng, dir, N, data.texCoords, sample, pdf, brdf);
-        through *= brdf * dot(sample, N) / pdf;
+        material->SampleAndCalcBrdf(rng, dir, normal, surface.texCoords, sample, pdf, brdf);
+        through *= brdf * dot(sample, normal) / pdf;
 
         if (i >= config.rayTrace.minDepth)
         {
@@ -112,18 +112,21 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
 
     using namespace glm;
 
+    u32vec2 dim(canvas.GetWidth(), canvas.GetHeight());
+    uint64_t nPixels = dim.x * dim.y;
+
     std::vector<std::thread> threadPool(config.system.nThreads);
     std::atomic_uint64_t pixel;
-    auto callable = [this, &canvas, &camera, &scene, &pixel]
+
+    auto callable = [&, this]
     {
         while (true)
         {
             uint64_t p = pixel.fetch_add(1, std::memory_order_relaxed);
 
-            u32vec2 dim(canvas.GetWidth(), canvas.GetHeight());
             float aspect = static_cast<float>(dim.x) / static_cast<float>(dim.y);
 
-            if (p >= dim.x * dim.y)
+            if (p >= nPixels)
                 return;
 
             uint32_t i = p % dim.x;
@@ -174,9 +177,36 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
 
     for (auto& t : threadPool)
         t = std::thread(callable);
-    
+
+    auto startTime = std::chrono::steady_clock::now();
+
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(1s);
+
+    uint64_t nPixelsCompleted;
+    while ((nPixelsCompleted = pixel.load(std::memory_order_relaxed)) < nPixels)
+    {
+        std::chrono::duration<double, std::milli> duration = std::chrono::steady_clock::now() - startTime;
+        auto timeRemaining = static_cast<double>(nPixels - nPixelsCompleted) / static_cast<double>(nPixelsCompleted) * duration;
+        std::chrono::seconds remainingSeconds = std::chrono::duration_cast<std::chrono::seconds>(timeRemaining);
+
+        auto time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        std::tm local{};
+        localtime_s(&local, &time);
+        std::chrono::hh_mm_ss formatter(std::chrono::hours(local.tm_hour) + std::chrono::minutes(local.tm_min) + std::chrono::seconds(local.tm_sec));
+        std::println("[{:%T}]: {} out of {} pixels completed ({:.2f}%); Estimated time remaining: {:%T}",
+            formatter,
+            nPixelsCompleted,
+            nPixels,
+            static_cast<double>(nPixelsCompleted) / static_cast<double>(nPixels) * 100.0,
+            remainingSeconds);
+
+        std::this_thread::sleep_for(1s);
+    }
+
     for (auto& t : threadPool)
-        t.join();
+        if (t.joinable())
+            t.join();
 }
 
 }

@@ -55,8 +55,7 @@ public:
     //         return ConvertToAttribute<attribType>(attributes.at(attribType).get());
     //     return nullptr;
     // }
-    virtual std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir) const = 0;
-    virtual void GetSurfaceData(const glm::vec3& point, SurfaceData& data) const = 0;
+    virtual std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const = 0;
     virtual ~Object() {}
 private:
     using void_unique_ptr = std::unique_ptr<void, void(*)(const void*)>;
@@ -67,9 +66,9 @@ class SimpleMaterialObject : public Object
 {
 public:
     SimpleMaterialObject() = default;
-    virtual void GetSurfaceData(const glm::vec3& point, SurfaceData& data) const
+    const Material* GetMaterial() const
     {
-        data.material = material.get();
+        return material.get();
     }
     template <typename T>
         requires std::is_base_of_v<Material, std::remove_reference_t<T>>
@@ -87,8 +86,7 @@ public:
     Sphere(const glm::vec3& origin, float radius)
         : origin(origin), radius{radius}, radiusSquared{radius * radius}
     {}
-    std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir) const override;
-    void GetSurfaceData(const glm::vec3& point, SurfaceData& data) const override;
+    std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const override;
 private:
     glm::vec3 origin;
     float radius;
@@ -101,8 +99,7 @@ public:
     Plane(const glm::vec3& origin, const glm::vec3& normal)
         : origin(origin), normal(normal)
     {}
-    std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir) const override;
-    void GetSurfaceData(const glm::vec3& point, SurfaceData& data) const override;
+    std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const override;
 private:
     glm::vec3 origin, normal;
 };

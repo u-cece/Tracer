@@ -9,6 +9,7 @@ add_library(tracer
             ${PROJECT_SOURCE_DIR}/include/tracer/scene.h
             ${PROJECT_SOURCE_DIR}/include/tracer/tracer.h
             material.cpp
+            mesh.cpp
             sampler.cpp
             scene.cpp
             thread_pool.h

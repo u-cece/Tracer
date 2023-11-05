@@ -16,6 +16,7 @@ public:
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const = 0;
     virtual glm::vec3 GetEmissivity(const glm::vec2& texCoords) const  { return glm::vec3(0.0f); }
     virtual glm::vec3 GetFallbackEmissivity() const { return glm::vec3(0.0f); }
+    virtual ~Material() {}
 };
 
 class SimpleDiffuseMaterial : public Material

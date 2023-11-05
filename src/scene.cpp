@@ -17,10 +17,10 @@ void Scene::Trace(const glm::vec3& orig, const glm::vec3& dir, HitResult& hitRes
                 | std::views::transform([](const std::unique_ptr<Object>& obj) { return obj.get(); })
                 | std::views::transform([&](const Object* obj)
                 {
-                    std::optional<float> distance = obj->Intersect(orig, dir);
+                    HitResult hit{};
+                    std::optional<float> distance = obj->Intersect(orig, dir, hit.surfaceData);
                     if (!distance)
                         return std::make_pair(obj, invalid);
-                    HitResult hit{};
                     hit.valid = true;
                     hit.distance = distance.value();
                     hit.point = orig + dir * distance.value();

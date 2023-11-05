@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
@@ -24,6 +26,98 @@ inline glm::vec2 samplePointOnDisk(float r1, float r2)
     float r = sqrt(r1);
     float theta = r2 * 2.0f * pi<float>();
     return vec2(r * cos(theta), r * sin(theta));
+}
+
+inline std::optional<float> intersectPlane(const glm::vec3& orig, const glm::vec3& dir, const glm::vec3& p, const glm::vec3& normal)
+{
+    using namespace glm;
+
+    float denom = dot(normal, dir);
+    if (denom > -1e-6f)
+        return std::nullopt;
+
+    float t = dot(p - orig, normal) / denom;
+    if (t < 0.0f)
+        return std::nullopt;
+    
+    return t;
+}
+
+inline bool insideOutsideTest(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& point, const glm::vec3& normal)
+{
+    using namespace glm;
+
+    vec3 e0 = p1 - p0;
+    vec3 e1 = p2 - p1;
+    vec3 e2 = p0 - p2;
+
+    vec3 c0 = point - p0;
+    vec3 c1 = point - p1;
+    vec3 c2 = point - p2;
+
+    if (dot(normal, cross(c0, e0)) > 0.0f &&
+        dot(normal, cross(c1, e1)) > 0.0f &&
+        dot(normal, cross(c2, e2)) > 0.0f)
+        return true;
+
+    return false;
+}
+
+inline bool insideOutsideTestCounterClockwise(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& point, const glm::vec3& normal)
+{
+    using namespace glm;
+
+    vec3 e0 = p1 - p0;
+    vec3 e1 = p2 - p1;
+    vec3 e2 = p0 - p2;
+
+    vec3 c0 = point - p0;
+    vec3 c1 = point - p1;
+    vec3 c2 = point - p2;
+
+    if (dot(normal, cross(e0, c0)) > 0.0f &&
+        dot(normal, cross(e1, c1)) > 0.0f &&
+        dot(normal, cross(e2, c2)) > 0.0f)
+        return true;
+
+    return false;
+}
+
+// assumes clock-wise
+inline std::optional<float> intersectTriangle(const glm::vec3& orig, const glm::vec3& dir, const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2)
+{
+    using namespace glm;
+
+    vec3 normal = normalize(cross(p2 - p0, p1 - p0));
+
+    std::optional<float> planeIntersection = intersectPlane(orig, dir, p0, normal);
+    if (!planeIntersection)
+        return std::nullopt;
+    
+    float t = planeIntersection.value();
+
+    vec3 point = orig + t * dir;
+    return insideOutsideTest(p0, p1, p2, point, normal) ?
+        std::optional<float>(t) :
+        std::nullopt;
+}
+
+inline std::optional<float> intersectTriangleCounterClockwise(const glm::vec3& orig, const glm::vec3& dir, const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2)
+{
+    using namespace glm;
+
+    vec3 normal = normalize(cross(p1 - p0, p2 - p0));
+
+    std::optional<float> planeIntersection = intersectPlane(orig, dir, p0, normal);
+    if (!planeIntersection)
+        return std::nullopt;
+    
+    float t = planeIntersection.value();
+
+    vec3 point = orig + t * dir;
+    return insideOutsideTestCounterClockwise(p0, p1, p2, point, normal) ?
+        std::optional<float>(t) :
+        std::nullopt;
 }
 
 }
