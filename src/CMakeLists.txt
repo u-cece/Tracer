@@ -7,12 +7,14 @@ add_library(tracer
             ${PROJECT_SOURCE_DIR}/include/tracer/rng.h
             ${PROJECT_SOURCE_DIR}/include/tracer/sampler.h
             ${PROJECT_SOURCE_DIR}/include/tracer/scene.h
+            ${PROJECT_SOURCE_DIR}/include/tracer/texture.h
             ${PROJECT_SOURCE_DIR}/include/tracer/tracer.h
             material.cpp
             mesh.cpp
             sampler.cpp
             scene.cpp
             thread_pool.h
+            texture.cpp
             tracer.cpp
             object.cpp
             util.h)

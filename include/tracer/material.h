@@ -1,11 +1,13 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 
 #include <glm/glm.hpp>
 
-#include "sampler.h"
 #include "rng.h"
+#include "sampler.h"
+#include "texture.h"
 
 namespace tracer
 {
@@ -14,28 +16,36 @@ class Material
 {
 public:
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const = 0;
-    virtual glm::vec3 GetEmissivity(const glm::vec2& texCoords) const  { return glm::vec3(0.0f); }
-    virtual glm::vec3 GetFallbackEmissivity() const { return glm::vec3(0.0f); }
+    virtual glm::vec3 GetEmissivity(const std::optional<glm::vec2>& texCoords) const  { return glm::vec3(0.0f); }
     virtual ~Material() {}
 };
 
 class SimpleDiffuseMaterial : public Material
 {
 public:
-    SimpleDiffuseMaterial(const glm::vec3& albedo);
+    SimpleDiffuseMaterial(const std::shared_ptr<Texture>& texture)
+    {
+        this->texture = texture;
+    }
+    SimpleDiffuseMaterial(const glm::vec3& albedo) : SimpleDiffuseMaterial(std::make_shared<SimpleGradientTexture>(albedo))
+    {}
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const override;
 private:
-    glm::vec3 albedo;
+    std::shared_ptr<Texture> texture;
 };
 
 class SimpleEmissiveMaterial : public SimpleDiffuseMaterial
 {
 public:
-    SimpleEmissiveMaterial(const glm::vec3& albedo, const glm::vec3& emissivity) : SimpleDiffuseMaterial(albedo), emissivity(emissivity) {}
-    virtual glm::vec3 GetEmissivity(const glm::vec2& texCoords) const { return emissivity; }
-    virtual glm::vec3 GetFallbackEmissivity() const { return emissivity; }
+    SimpleEmissiveMaterial(const std::shared_ptr<Texture>& albedo, const std::shared_ptr<Texture>& emissivity)
+        : SimpleDiffuseMaterial(albedo), texture(emissivity)
+    {}
+    SimpleEmissiveMaterial(const glm::vec3& albedo, const glm::vec3& emissivity)
+        : SimpleDiffuseMaterial(albedo), texture(std::make_shared<SimpleGradientTexture>(emissivity))
+    {}
+    virtual glm::vec3 GetEmissivity(const std::optional<glm::vec2>& texCoords) const override { return texture->SampleOptional(texCoords); }
 private:
-    glm::vec3 emissivity;
+    std::shared_ptr<Texture> texture;
 };
 
 class SimpleReflectiveMaterial : public Material
@@ -47,12 +57,17 @@ public:
 class SpecularCoatedMaterial : public Material
 {
 public:
-    SpecularCoatedMaterial(const glm::vec3& albedo, float alpha, float ior) : albedo(albedo), alpha{alpha}, ior{ior} {}
+    SpecularCoatedMaterial(const std::shared_ptr<Texture>& albedo, const std::shared_ptr<Texture>& alpha, const std::shared_ptr<Texture>& ior)
+        : albedoTexture(albedo), alphaTexture(alpha), iorTexture(ior)
+    {}
+    SpecularCoatedMaterial(const glm::vec3& albedo, float alpha, float ior)
+        : albedoTexture(std::make_shared<SimpleGradientTexture>(albedo)), alphaTexture(std::make_shared<SimpleGradientTexture>(glm::vec3(alpha))), iorTexture(std::make_shared<SimpleGradientTexture>(glm::vec3(ior)))
+    {}
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const override;
 private:
-    glm::vec3 albedo;
-    float alpha;
-    float ior;
+    std::shared_ptr<Texture> albedoTexture;
+    std::shared_ptr<Texture> alphaTexture;
+    std::shared_ptr<Texture> iorTexture;
 };
 
 class PerfectSpecularCoatedMaterial : public Material

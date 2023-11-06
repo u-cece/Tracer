@@ -7,12 +7,6 @@
 namespace tracer
 {
 
-SimpleDiffuseMaterial::SimpleDiffuseMaterial(const glm::vec3& albedo)
-    :
-    albedo(albedo)
-{
-}
-
 void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
@@ -21,7 +15,7 @@ void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir,
     samplers::generateCosine(rng, localSample, pdf);
     sample = transformSampleToWorld(normal, localSample);
 
-    brdf = albedo / pi<float>();
+    brdf = texture->SampleOptional(texCoords) / pi<float>();
 }
 
 glm::vec3 calcMirroredRay(const glm::vec3& in, const glm::vec3& normal)
@@ -101,6 +95,10 @@ void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir
     sample = transformSampleToWorld(normal, localSample);
 
     vec3 half = normalize(sample - rayDir);
+
+    vec3 albedo = albedoTexture->SampleOptional(texCoords);
+    float alpha = alphaTexture->SampleOptional(texCoords).r;
+    float ior = iorTexture->SampleOptional(texCoords).r;
 
     float d = ndfGgx(alpha, normal, half);
 

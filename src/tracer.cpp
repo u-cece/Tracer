@@ -76,10 +76,7 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
 
         const Material* material = hit.surfaceData.material;
         vec3 emissive;
-        if (surface.texCoords)
-            emissive = material->GetEmissivity(surface.texCoords.value());
-        else
-            emissive = material->GetFallbackEmissivity();
+        emissive = material->GetEmissivity(surface.texCoords);
 
         color += through * emissive;
 
