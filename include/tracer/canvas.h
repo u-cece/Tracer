@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <memory>
 #include <span>
+#include <string_view>
 
 namespace tracer
 {
@@ -41,6 +42,7 @@ public:
     {
         return std::span<const uint8_t>(data.get(), getDataSize());
     }
+    void SaveToPNG(std::string_view file) const;
 private:
     size_t getDataSize() const { return width * height * channelCount; }
     size_t getIndex(uint32_t w, uint32_t h, uint32_t channel) const

@@ -37,15 +37,16 @@ private:
 class SimpleEmissiveMaterial : public SimpleDiffuseMaterial
 {
 public:
-    SimpleEmissiveMaterial(const std::shared_ptr<Texture>& albedo, const std::shared_ptr<Texture>& emissivity)
-        : SimpleDiffuseMaterial(albedo), texture(emissivity)
+    SimpleEmissiveMaterial(const std::shared_ptr<Texture>& albedo, const std::shared_ptr<Texture>& emissivity, float multiplier = 1.0f)
+        : SimpleDiffuseMaterial(albedo), texture(emissivity), multiplier(multiplier)
     {}
     SimpleEmissiveMaterial(const glm::vec3& albedo, const glm::vec3& emissivity)
         : SimpleDiffuseMaterial(albedo), texture(std::make_shared<SimpleGradientTexture>(emissivity))
     {}
-    virtual glm::vec3 GetEmissivity(const std::optional<glm::vec2>& texCoords) const override { return texture->SampleOptional(texCoords); }
+    virtual glm::vec3 GetEmissivity(const std::optional<glm::vec2>& texCoords) const override { return multiplier * texture->SampleOptional(texCoords); }
 private:
     std::shared_ptr<Texture> texture;
+    float multiplier;
 };
 
 class SimpleReflectiveMaterial : public Material

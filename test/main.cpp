@@ -6,11 +6,6 @@
 #include <print>
 #include <ranges>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb_image_write.h>
-
 #include <tracer/camera.h>
 #include <tracer/canvas.h>
 #include <tracer/mesh.h>
@@ -25,18 +20,33 @@ int main()
 
     std::vector<std::unique_ptr<Object>> objects;
 
-    SimpleDiffuseMaterial whiteDiffuse(glm::vec3(0.73f));
-    SimpleDiffuseMaterial redDiffuse(glm::vec3(0.65f, 0.05f, 0.05f));
-    SimpleDiffuseMaterial greenDiffuse(glm::vec3(0.12f, 0.45f, 0.15f));
-    SimpleEmissiveMaterial emissive(glm::vec3(0.73f), glm::vec3(10.0f));
+    auto makeColor = [](const glm::vec3& color) { return std::make_shared<SimpleGradientTexture>(color); };
+
+    std::shared_ptr black = makeColor(glm::vec3(0.0f));
+    std::shared_ptr white = makeColor(glm::vec3(0.73f));
+    std::shared_ptr red = makeColor(glm::vec3(0.65f, 0.05f, 0.05f));
+    std::shared_ptr green = makeColor(glm::vec3(0.12f, 0.45f, 0.15f));
+    std::shared_ptr bright = makeColor(glm::vec3(10.0f));
+
+    SimpleDiffuseMaterial whiteDiffuse(white);
+    SimpleDiffuseMaterial redDiffuse(red);
+    SimpleDiffuseMaterial greenDiffuse(green);
+    SimpleEmissiveMaterial emissive(white, bright);
 
     SimpleReflectiveMaterial mirror;
-    PerfectSpecularCoatedMaterial perfectSpecular(glm::vec3(0.73f), 1.5f);
-    SpecularCoatedMaterial specularRed(glm::vec3(0.65f, 0.05f, 0.05f), 0.1f, 1.5f);
-    SpecularCoatedMaterial specularWhite(glm::vec3(0.73f), 0.1f, 1.5f);
+    SpecularCoatedMaterial specularRed(red, makeColor(glm::vec3(0.1f)), makeColor(glm::vec3(1.5f)));
+    SpecularCoatedMaterial specularWhite(white, makeColor(glm::vec3(0.1f)), makeColor(glm::vec3(1.5f)));
+
+    std::shared_ptr gradient = std::make_shared<SimpleGradientTexture>(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 1.0f));
+    SimpleDiffuseMaterial gradientDiffuse(gradient);
+    SimpleEmissiveMaterial gradientEmissive(black, gradient, 10.0f);
+
+    std::shared_ptr image = std::make_shared<ImageTexture>("ref14.png");
+    SimpleDiffuseMaterial texturedDiffuse(image);
+    SimpleEmissiveMaterial texturedEmissive(black, image, 10.0f);
 
     std::unique_ptr floor = std::make_unique<Plane>(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    floor->SetMaterial(specularWhite);
+    floor->SetMaterial(whiteDiffuse);
     std::unique_ptr left = std::make_unique<Plane>(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
     left->SetMaterial(redDiffuse);
     std::unique_ptr right = std::make_unique<Plane>(glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -46,33 +56,32 @@ int main()
     std::unique_ptr ceiling = std::make_unique<Plane>(glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
     ceiling->SetMaterial(whiteDiffuse);
 
-    std::vector<Vertex> v;
-    v.push_back(Vertex{glm::vec3(0.5f, 1.0f, 0.5f)});
-    v.push_back(Vertex{glm::vec3(-0.5f, 1.0f, 0.5f)});
-    v.push_back(Vertex{glm::vec3(-0.5f, 0.0f, 0.0f)});
-    v.push_back(Vertex{glm::vec3(0.5f, 0.5f, 0.0f)});
-    std::vector<glm::u32vec3> i;
-    i.emplace_back(0, 1, 2);
-    i.emplace_back(2, 3, 0);
-    std::unique_ptr<Mesh> mesh = Mesh::Create(v, i);
-    mesh->SetMaterial(mirror);
+    std::vector<Vertex> lightVertices;
+    lightVertices.push_back(Vertex{glm::vec3(0.5f, 1.9375f, 0.5f), glm::vec2(0.0f, 1.0f)});
+    lightVertices.push_back(Vertex{glm::vec3(-0.5f, 1.9375f, 0.5f), glm::vec2(1.0f, 1.0f)});
+    lightVertices.push_back(Vertex{glm::vec3(-0.5f, 1.9375f, 0.0f), glm::vec2(1.0f, 0.0f)});
+    lightVertices.push_back(Vertex{glm::vec3(0.5f, 1.9375f, 0.0f), glm::vec2(0.0f, 0.0f)});
+    std::vector<glm::u32vec3> lightIndices;
+    lightIndices.emplace_back(0, 1, 2);
+    lightIndices.emplace_back(2, 3, 0);
+    std::unique_ptr<Mesh> light = Mesh::Create(lightVertices, lightIndices);
+    light->SetMaterial(gradientEmissive);
 
-    std::unique_ptr sphere1 = std::make_unique<Sphere>(glm::vec3(-0.2f, 0.2f, 0.5f), 0.2f);
-    sphere1->SetMaterial(specularRed);
-    std::unique_ptr sphere2 = std::make_unique<Sphere>(glm::vec3(0.4f, 0.4f, 0.0f), 0.4f);
-    sphere2->SetMaterial(whiteDiffuse);
-
-    std::unique_ptr light = std::make_unique<Sphere>(glm::vec3(0.0f, 2.75f, 0.0f), 1.0f);
-    light->SetMaterial(emissive);
+    std::unique_ptr sphere1 = std::make_unique<Sphere>(glm::vec3(-0.5f, 0.25f, 0.5f), 0.25f);
+    sphere1->SetMaterial(gradientEmissive);
+    std::unique_ptr sphere2 = std::make_unique<Sphere>(glm::vec3(-0.25f, 1.0f, 0.0f), 0.125f);
+    sphere2->SetMaterial(gradientEmissive);
+    std::unique_ptr sphere3 = std::make_unique<Sphere>(glm::vec3(0.25f, 0.4375f, 0.25f), 0.4375f);
+    sphere3->SetMaterial(whiteDiffuse);
 
     objects.push_back(std::move(floor));
     objects.push_back(std::move(left));
     objects.push_back(std::move(right));
     objects.push_back(std::move(front));
     objects.push_back(std::move(ceiling));
-    objects.push_back(std::move(mesh));
-    //objects.push_back(std::move(sphere1));
-    //objects.push_back(std::move(sphere2));
+    objects.push_back(std::move(sphere1));
+    objects.push_back(std::move(sphere2));
+    objects.push_back(std::move(sphere3));
     objects.push_back(std::move(light));
 
     Camera camera{};
@@ -89,7 +98,7 @@ int main()
     TracerConfiguration config{};
     config.system.nThreads = 6u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nRaysPerPixel = 16u;
+    config.rayTrace.nRaysPerPixel = 65536u;
     // config.lens.fov = glm::radians(90.0f);
     config.lens.fov = glm::radians(30.0f);
     //LensConfiguration::fromLensParams(config.lens, 0.035f, 0.022f, 1.0f, 12.0f);
@@ -104,7 +113,7 @@ int main()
 
     std::println("Time elapsed: {}ms", duration.count());
 
-    stbi_write_png("out.png", WIDTH, HEIGHT, 3, canvas.GetData().data(), 0);
+    canvas.SaveToPNG("out.png");
 
     return 0;
 }

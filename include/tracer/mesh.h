@@ -15,7 +15,7 @@ namespace tracer
 struct Vertex
 {
     glm::vec3 pos;
-    
+    glm::vec2 texCoords;
 };
 
 class Mesh : public SimpleMaterialObject

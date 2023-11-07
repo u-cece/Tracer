@@ -1,6 +1,8 @@
 #pragma once
 
+#include <memory>
 #include <optional>
+#include <string_view>
 
 #include <glm/glm.hpp>
 
@@ -46,6 +48,29 @@ public:
 private:
     glm::vec3 topL, topR, botR, botL;
     glm::vec3 avg;
+};
+
+class ImageTexture : public Texture
+{
+public:
+    ImageTexture(std::string_view file);
+    glm::vec3 Sample(const glm::vec2& uv) const;
+private:
+    static glm::vec3 toFloats(const glm::u8vec3& bytes)
+    {
+        return glm::vec3(bytes) / 255.0f;
+    }
+    glm::u8vec3 load(uint32_t u, uint32_t v) const
+    {
+        return data[getIndex(u, v)];
+    }
+    size_t getIndex(uint32_t u, uint32_t v) const
+    {
+        assert(u < width && v < height);
+        return (v * width + u);
+    }
+    uint32_t width, height;
+    std::unique_ptr<glm::u8vec3[]> data;
 };
 
 }

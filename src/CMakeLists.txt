@@ -9,6 +9,7 @@ add_library(tracer
             ${PROJECT_SOURCE_DIR}/include/tracer/scene.h
             ${PROJECT_SOURCE_DIR}/include/tracer/texture.h
             ${PROJECT_SOURCE_DIR}/include/tracer/tracer.h
+            canvas.cpp
             material.cpp
             mesh.cpp
             sampler.cpp
@@ -22,5 +23,9 @@ add_library(tracer
 target_compile_features(tracer PRIVATE cxx_std_23)
 
 target_link_libraries(tracer PUBLIC glm)
+
+target_include_directories(tracer PRIVATE ${PROJECT_SOURCE_DIR}/dependencies/stb)
+
+target_compile_definitions(tracer PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_CRT_SECURE_NO_WARNINGS>)
 
 target_include_directories(tracer PUBLIC ${PROJECT_SOURCE_DIR}/include)

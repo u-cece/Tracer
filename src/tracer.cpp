@@ -185,18 +185,24 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
     {
         std::chrono::duration<double, std::milli> duration = std::chrono::steady_clock::now() - startTime;
         auto timeRemaining = static_cast<double>(nPixels - nPixelsCompleted) / static_cast<double>(nPixelsCompleted) * duration;
-        std::chrono::seconds remainingSeconds = std::chrono::duration_cast<std::chrono::seconds>(timeRemaining);
+        std::chrono::seconds remainingDuration = std::chrono::duration_cast<std::chrono::seconds>(timeRemaining);
+        int64_t remainingSeconds = remainingDuration.count();
+        int64_t remainingMinutes = remainingSeconds / 60;
+        int64_t remainingHours = remainingMinutes / 60;
+        uint64_t secondsDisp = remainingSeconds % 60;
+        uint64_t minutesDisp = remainingMinutes % 60;
+        uint64_t hoursDisp = remainingHours;
 
         auto time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         std::tm local{};
         localtime_s(&local, &time);
         std::chrono::hh_mm_ss formatter(std::chrono::hours(local.tm_hour) + std::chrono::minutes(local.tm_min) + std::chrono::seconds(local.tm_sec));
-        std::println("[{:%T}]: {} out of {} pixels completed ({:.2f}%); Estimated time remaining: {:%T}",
+        std::println("[{:%T}]: {} out of {} pixels completed ({:.2f}%); Estimated time remaining: {:02}:{:02}:{:02}",
             formatter,
             nPixelsCompleted,
             nPixels,
             static_cast<double>(nPixelsCompleted) / static_cast<double>(nPixels) * 100.0,
-            remainingSeconds);
+            hoursDisp, minutesDisp, secondsDisp);
 
         std::this_thread::sleep_for(1s);
     }
