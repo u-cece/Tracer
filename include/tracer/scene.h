@@ -29,14 +29,11 @@ public:
     template <std::ranges::input_range Range>
         requires (
             std::is_same_v<
-                std::ranges::range_value_t<Range>,
-                std::unique_ptr<Object>>)
+                std::ranges::range_reference_t<Range>,
+                std::unique_ptr<Object>&&>)
     void AddObjects(Range&& range)
     {
-        std::ranges::for_each(range, [this](std::unique_ptr<Object>& obj)
-        {
-            objects.push_back(std::move(obj));
-        });
+        std::ranges::copy(range, std::back_inserter(objects));
     }
     auto GetObjects() const
     {

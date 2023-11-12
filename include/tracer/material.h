@@ -15,8 +15,9 @@ namespace tracer
 class Material
 {
 public:
+    virtual void Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const;
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const = 0;
-    virtual glm::vec3 GetEmissivity(const std::optional<glm::vec2>& texCoords) const  { return glm::vec3(0.0f); }
+    virtual glm::vec3 GetEmissivity(const std::optional<glm::vec2>& texCoords) const { return glm::vec3(0.0f); }
     virtual ~Material() {}
 };
 
@@ -58,17 +59,17 @@ public:
 class SpecularCoatedMaterial : public Material
 {
 public:
-    SpecularCoatedMaterial(const std::shared_ptr<Texture>& albedo, const std::shared_ptr<Texture>& alpha, const std::shared_ptr<Texture>& ior)
-        : albedoTexture(albedo), alphaTexture(alpha), iorTexture(ior)
+    SpecularCoatedMaterial(const std::shared_ptr<Texture>& albedo, const std::shared_ptr<Texture>& alpha, float ior)
+        : albedoTexture(albedo), alphaTexture(alpha), ior(ior)
     {}
     SpecularCoatedMaterial(const glm::vec3& albedo, float alpha, float ior)
-        : albedoTexture(std::make_shared<SimpleGradientTexture>(albedo)), alphaTexture(std::make_shared<SimpleGradientTexture>(glm::vec3(alpha))), iorTexture(std::make_shared<SimpleGradientTexture>(glm::vec3(ior)))
+        : albedoTexture(std::make_shared<SimpleGradientTexture>(albedo)), alphaTexture(std::make_shared<SimpleGradientTexture>(glm::vec3(alpha))), ior(ior)
     {}
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const override;
 private:
     std::shared_ptr<Texture> albedoTexture;
     std::shared_ptr<Texture> alphaTexture;
-    std::shared_ptr<Texture> iorTexture;
+    float ior;
 };
 
 class PerfectSpecularCoatedMaterial : public Material

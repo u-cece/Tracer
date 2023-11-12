@@ -7,6 +7,16 @@
 namespace tracer
 {
 
+void  Material::Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const
+{
+    using namespace glm;
+
+    float pdf;
+    vec3 brdf;
+    SampleAndCalcBrdf(rng, rayDir, normal, texCoords, wi, pdf, brdf);
+    attenuation *= brdf * dot(wi, normal) / pdf;
+}
+
 void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
@@ -98,7 +108,6 @@ void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir
 
     vec3 albedo = albedoTexture->SampleOptional(texCoords);
     float alpha = alphaTexture->SampleOptional(texCoords).r;
-    float ior = iorTexture->SampleOptional(texCoords).r;
 
     float d = ndfGgx(alpha, normal, half);
 

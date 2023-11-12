@@ -11,6 +11,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/color_space.hpp>
 
 #include "util.h"
 
@@ -58,8 +59,12 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
     vec3 orig = _Orig;
     vec3 dir = _Dir;
 
+    const Object* insideObj = nullptr;
+
     for (uint32_t i = 0; i < config.rayTrace.maxDepth; i++)
     {
+        bool inside = insideObj != nullptr;
+        
         HitResult hit{};
         scene.Trace(orig, dir, hit);
 
@@ -81,10 +86,7 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         color += through * emissive;
 
         vec3 sample;
-        float pdf;
-        vec3 brdf;
-        material->SampleAndCalcBrdf(rng, dir, normal, surface.texCoords, sample, pdf, brdf);
-        through *= brdf * dot(sample, normal) / pdf;
+        material->Shade(rng, dir, normal, surface.texCoords, sample, through, inside);
 
         if (i >= config.rayTrace.minDepth)
         {

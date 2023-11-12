@@ -20,10 +20,10 @@ add_library(tracer
             object.cpp
             util.h)
 
-target_compile_features(tracer PRIVATE cxx_std_23)
+target_compile_features(tracer PUBLIC cxx_std_23)
 
 target_link_libraries(tracer PUBLIC glm)
-
+target_link_libraries(tracer PRIVATE nlohmann_json::nlohmann_json)
 target_include_directories(tracer PRIVATE ${PROJECT_SOURCE_DIR}/dependencies/stb)
 
 target_compile_definitions(tracer PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_CRT_SECURE_NO_WARNINGS>)

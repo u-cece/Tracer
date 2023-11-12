@@ -3,10 +3,12 @@
 #include <memory>
 #include <ranges>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <glm/glm.hpp>
 
+#include "material.h"
 #include "object.h"
 
 namespace tracer
@@ -18,34 +20,34 @@ struct Vertex
     glm::vec2 texCoords;
 };
 
-class Mesh : public SimpleMaterialObject
+struct Triad
+{
+    glm::u32vec3 indices;
+    const Material* material;
+};
+
+enum class CullMode // front = clockwise, back = counter-clockwise
+{
+    None, Front, Back
+};
+
+class Mesh : public Object
 {
 public:
-    template <std::ranges::input_range VertexRange,
-              std::ranges::input_range IndexRange>
-        requires
-            std::is_same_v<
-                std::ranges::range_value_t<VertexRange>,
-                Vertex
-            > &&
-            std::is_same_v<
-                std::ranges::range_value_t<IndexRange>,
-                glm::u32vec3
-            >
-    static std::unique_ptr<Mesh> Create(VertexRange&& vertices, IndexRange&& indices)
-    {
-        VerticesType v = vertices | std::ranges::to<std::vector>();
-        IndicesType i = indices | std::ranges::to<std::vector>();
-        return std::unique_ptr<Mesh>(new Mesh(std::move(v), std::move(i)));
-    }
+    static std::unique_ptr<Mesh> Create(std::string_view jsonStr);
     virtual std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const override;
 private:
-    using VerticesType = std::vector<Vertex>;
-    using IndicesType = std::vector<glm::u32vec3>;
-    Mesh(VerticesType&& vertices, IndicesType&& indices) : vertices(std::move(vertices)), indices(std::move(indices))
-    {}
-    VerticesType vertices;
-    IndicesType indices;
+    enum class PrimitiveType
+    {
+        Solid, Translucent
+    };
+
+    Mesh() {}
+
+    std::vector<std::unique_ptr<Material>> materialHolder;
+    std::vector<Triad> triads;
+    std::vector<Vertex> vertices;
+    CullMode cullMode;
 };
 
 }

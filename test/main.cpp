@@ -1,6 +1,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <print>
@@ -16,8 +17,6 @@ int main()
 {
     using namespace tracer;
 
-    const uint32_t WIDTH = 512, HEIGHT = 512;
-
     std::vector<std::unique_ptr<Object>> objects;
 
     auto makeColor = [](const glm::vec3& color) { return std::make_shared<SimpleGradientTexture>(color); };
@@ -28,16 +27,20 @@ int main()
     std::shared_ptr green = makeColor(glm::vec3(0.12f, 0.45f, 0.15f));
     std::shared_ptr bright = makeColor(glm::vec3(10.0f));
 
+    std::shared_ptr peachpuff = makeColor(glm::vec3(1.0f, 0.85f, 0.73f));
+
     SimpleDiffuseMaterial whiteDiffuse(white);
     SimpleDiffuseMaterial redDiffuse(red);
     SimpleDiffuseMaterial greenDiffuse(green);
     SimpleEmissiveMaterial emissive(white, bright);
 
+    PerfectSpecularCoatedMaterial perfectSpecularCoatedMaterial(glm::vec3(0.73f), 1.5f);
     SimpleReflectiveMaterial mirror;
-    SpecularCoatedMaterial specularRed(red, makeColor(glm::vec3(0.1f)), makeColor(glm::vec3(1.5f)));
-    SpecularCoatedMaterial specularWhite(white, makeColor(glm::vec3(0.1f)), makeColor(glm::vec3(1.5f)));
+    SpecularCoatedMaterial specularRed(red, makeColor(glm::vec3(0.1f)), 1.5f);
+    SpecularCoatedMaterial specularWhite(white, makeColor(glm::vec3(0.1f)), 1.5f);
+    SpecularCoatedMaterial specularPeachpuff(peachpuff, makeColor(glm::vec3(0.02f)), 1.5f);
 
-    std::shared_ptr gradient = std::make_shared<SimpleGradientTexture>(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 1.0f));
+    std::shared_ptr gradient = std::make_shared<SimpleGradientTexture>(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
     SimpleDiffuseMaterial gradientDiffuse(gradient);
     SimpleEmissiveMaterial gradientEmissive(black, gradient, 10.0f);
 
@@ -56,23 +59,23 @@ int main()
     std::unique_ptr ceiling = std::make_unique<Plane>(glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
     ceiling->SetMaterial(whiteDiffuse);
 
-    std::vector<Vertex> lightVertices;
-    lightVertices.push_back(Vertex{glm::vec3(0.5f, 1.9375f, 0.5f), glm::vec2(0.0f, 1.0f)});
-    lightVertices.push_back(Vertex{glm::vec3(-0.5f, 1.9375f, 0.5f), glm::vec2(1.0f, 1.0f)});
-    lightVertices.push_back(Vertex{glm::vec3(-0.5f, 1.9375f, 0.0f), glm::vec2(1.0f, 0.0f)});
-    lightVertices.push_back(Vertex{glm::vec3(0.5f, 1.9375f, 0.0f), glm::vec2(0.0f, 0.0f)});
-    std::vector<glm::u32vec3> lightIndices;
-    lightIndices.emplace_back(0, 1, 2);
-    lightIndices.emplace_back(2, 3, 0);
-    std::unique_ptr<Mesh> light = Mesh::Create(lightVertices, lightIndices);
-    light->SetMaterial(gradientEmissive);
+    floor->SetMaterial(perfectSpecularCoatedMaterial);
+    left->SetMaterial(perfectSpecularCoatedMaterial);
+    right->SetMaterial(perfectSpecularCoatedMaterial);
+    front->SetMaterial(perfectSpecularCoatedMaterial);
+    ceiling->SetMaterial(perfectSpecularCoatedMaterial);
+
+    std::ifstream lightFileStream("test.json");
+    std::string lightFile;
+    lightFile.assign(std::istreambuf_iterator<char>(lightFileStream), std::istreambuf_iterator<char>());
+    auto light = Mesh::Create(lightFile);
 
     std::unique_ptr sphere1 = std::make_unique<Sphere>(glm::vec3(-0.5f, 0.25f, 0.5f), 0.25f);
     sphere1->SetMaterial(gradientEmissive);
     std::unique_ptr sphere2 = std::make_unique<Sphere>(glm::vec3(-0.25f, 1.0f, 0.0f), 0.125f);
     sphere2->SetMaterial(gradientEmissive);
     std::unique_ptr sphere3 = std::make_unique<Sphere>(glm::vec3(0.25f, 0.4375f, 0.25f), 0.4375f);
-    sphere3->SetMaterial(whiteDiffuse);
+    sphere3->SetMaterial(specularPeachpuff);
 
     objects.push_back(std::move(floor));
     objects.push_back(std::move(left));
@@ -91,14 +94,13 @@ int main()
     camera.yaw = glm::radians(0.0f);
     camera.pitch = glm::radians(0.0f);
     camera.pos = glm::vec3(0.0f, 1.0f, -4.0f);
-    Canvas canvas(WIDTH, HEIGHT, 3);
+    Canvas canvas(1024, 1024, 3);
     Scene scene;
-    scene.AddObjects(objects);
-
+    scene.AddObjects(objects | std::views::as_rvalue);
     TracerConfiguration config{};
     config.system.nThreads = 6u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nRaysPerPixel = 65536u;
+    config.rayTrace.nRaysPerPixel = 16u;
     // config.lens.fov = glm::radians(90.0f);
     config.lens.fov = glm::radians(30.0f);
     //LensConfiguration::fromLensParams(config.lens, 0.035f, 0.022f, 1.0f, 12.0f);

@@ -11,19 +11,19 @@
 namespace tracer
 {
 
-// enum class AttributeType
-// {
+enum class AttributeType
+{
     
-// };
+};
 
-// template <AttributeType>
-// struct AttributeTypeOf {};
+template <AttributeType>
+struct AttributeTypeOf {};
 
-// template <AttributeType type>
-// auto ConvertToAttribute(const void* attrib)
-// {
-//     return reinterpret_cast<const AttributeTypeOf<type>::type*>(attrib);
-// }
+template <AttributeType type>
+auto ConvertToAttribute(const void* attrib)
+{
+    return reinterpret_cast<const AttributeTypeOf<type>::type*>(attrib);
+}
 
 struct SurfaceData
 {
@@ -59,7 +59,7 @@ public:
     virtual ~Object() {}
 private:
     using void_unique_ptr = std::unique_ptr<void, void(*)(const void*)>;
-    //std::unordered_map<AttributeType, void_unique_ptr> attributes;
+    // std::unordered_map<AttributeType, void_unique_ptr> attributes;
 };
 
 class SimpleMaterialObject : public Object
