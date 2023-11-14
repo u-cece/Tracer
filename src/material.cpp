@@ -7,7 +7,7 @@
 namespace tracer
 {
 
-void  Material::Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const
+void SimpleReflectiveMaterial::Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const
 {
     using namespace glm;
 
@@ -35,7 +35,7 @@ glm::vec3 calcMirroredRay(const glm::vec3& in, const glm::vec3& normal)
     return in + 2.0f * b;
 }
 
-void SimpleReflectiveMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void SimpleMirrorMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
 

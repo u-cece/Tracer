@@ -4,6 +4,7 @@
 #include <exception>
 #include <filesystem>
 #include <optional>
+#include <print>
 #include <ranges>
 #include <unordered_map>
 
@@ -185,6 +186,17 @@ namespace
         return textures.at(index);
     }
 
+    std::unique_ptr<Material> parseSimpleDiffuseMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
+    {
+        auto required = {"type", "diffuse-texture"};
+        std::vector<json::const_iterator> elements;
+        findRequiredFields(obj, required, std::back_inserter(elements));
+
+        const auto& diffuse = parseTextureIndexJson(*elements.at(1), textures);
+
+        return std::make_unique<SimpleDiffuseMaterial>(diffuse);
+    }
+
     std::unique_ptr<Material> parseSpecularCoatedMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
         auto required = {"type", "diffuse-texture", "roughness-texture", "ior"};
@@ -224,7 +236,7 @@ namespace
     }
 
     std::unordered_map<std::string, std::function<std::unique_ptr<Material>(const json&, const std::vector<std::shared_ptr<Texture>>&)>> typeNameToMaterialFactory
-    {{"SpecularCoated", parseSpecularCoatedMaterialJson}, {"SimpleEmissive", parseSimpleEmissiveMaterialJson}, {"PerfectRefractive", parsePerfectRefractiveMaterialJson}};
+    {{"SimpleDiffuse", parseSimpleDiffuseMaterialJson}, {"SpecularCoated", parseSpecularCoatedMaterialJson}, {"SimpleEmissive", parseSimpleEmissiveMaterialJson}, {"PerfectRefractive", parsePerfectRefractiveMaterialJson}};
 
     void parsePrimitiveJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures,
         std::back_insert_iterator<std::vector<std::unique_ptr<Material>>> materialsInserter,
@@ -295,12 +307,26 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _jsonStr)
         throw std::runtime_error("");
 
     std::vector<json::const_iterator> elements;
-    auto required = {"textures", "primitives", "vertices"};
+    auto required = {"textures", "primitives", "vertices", "cull-mode"};
     findRequiredFields(jsonObj, required, std::back_inserter(elements));
 
-    if (std::ranges::find_if_not(elements, [](json::const_iterator element) { return element->is_array(); }) != elements.end())
+    if (std::find_if_not(elements.begin(), elements.begin() + 3, [](json::const_iterator element)
+        { return element->is_array(); }) != elements.begin() + 3)
         throw std::runtime_error("");
-    
+    if (!elements.at(3)->is_string())
+        throw std::runtime_error("");
+
+    std::string cullModeStr = elements.at(3)->get<std::string>();
+    CullMode cullMode;
+    if (cullModeStr == "none")
+        cullMode = CullMode::None;
+    else if (cullModeStr == "back")
+        cullMode = CullMode::Back;
+    else if (cullModeStr == "front")
+        cullMode = CullMode::Front;
+    else
+        throw std::runtime_error("");
+
     std::vector<std::shared_ptr<Texture>> textures;
     for (const json& obj : *elements.at(0))
         textures.push_back(parseTypedJson<std::shared_ptr<Texture>>(obj, typeNameToTextureFactory));
@@ -319,7 +345,7 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _jsonStr)
     // to-do: check if all the indices are within bounds
 
     std::unique_ptr<Mesh> mesh(new Mesh());
-    mesh->cullMode = CullMode::None;
+    mesh->cullMode = cullMode;
     mesh->materialHolder = std::move(materials);
     mesh->triads = std::move(triads);
     mesh->vertices = std::move(vertices);
@@ -352,10 +378,10 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
 
             if (cullMode == CullMode::None)
             {
-                t = intersectTriangle(orig, dir, p0, p1, p2, coords);
+                t = intersectTriangleMT(orig, dir, p0, p1, p2, coords);
                 bool clockwise;
                 if (!(clockwise = t.has_value()))
-                    t = intersectTriangleCounterClockwise(orig, dir, p0, p1, p2, coords);
+                    t = intersectTriangleCounterClockwiseMT(orig, dir, p0, p1, p2, coords);
                 if (!t)
                     return std::nullopt;
                 normal = clockwise ?
@@ -364,14 +390,14 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
             }
             else if (cullMode == CullMode::Back)
             {
-                t = intersectTriangle(orig, dir, p0, p1, p2, coords);
+                t = intersectTriangleMT(orig, dir, p0, p1, p2, coords);
                 if (!t)
                     return std::nullopt;
                 normal = cross(p2 - p0, p1 - p0);
             }
             else if (cullMode == CullMode::Front)
             {
-                t = intersectTriangleCounterClockwise(orig, dir, p0, p1, p2, coords);
+                t = intersectTriangleCounterClockwiseMT(orig, dir, p0, p1, p2, coords);
                 if (!t)
                     return std::nullopt;
                 normal = cross(p1 - p0, p2 - p0);

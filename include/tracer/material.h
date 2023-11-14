@@ -15,13 +15,29 @@ namespace tracer
 class Material
 {
 public:
-    virtual void Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const;
-    virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const = 0;
+    virtual void Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const = 0;
     virtual glm::vec3 GetEmissivity(const std::optional<glm::vec2>& texCoords) const { return glm::vec3(0.0f); }
     virtual ~Material() {}
 };
 
-class SimpleDiffuseMaterial : public Material
+class DebugMaterial : public Material
+{
+    virtual void Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const override
+    {
+        attenuation = glm::vec3(0.0f);
+    }
+    virtual glm::vec3 GetEmissivity(const std::optional<glm::vec2>& texCoords) const override { return glm::vec3(1.0f); }
+};
+
+class SimpleReflectiveMaterial : public Material
+{
+public:
+    virtual void Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const;
+protected:
+    virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const = 0;
+};
+
+class SimpleDiffuseMaterial : public SimpleReflectiveMaterial
 {
 public:
     SimpleDiffuseMaterial(const std::shared_ptr<Texture>& texture)
@@ -50,13 +66,13 @@ private:
     float multiplier;
 };
 
-class SimpleReflectiveMaterial : public Material
+class SimpleMirrorMaterial : public SimpleReflectiveMaterial
 {
 public:
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const override;
 };
 
-class SpecularCoatedMaterial : public Material
+class SpecularCoatedMaterial : public SimpleReflectiveMaterial
 {
 public:
     SpecularCoatedMaterial(const std::shared_ptr<Texture>& albedo, const std::shared_ptr<Texture>& alpha, float ior)
@@ -72,7 +88,7 @@ private:
     float ior;
 };
 
-class PerfectSpecularCoatedMaterial : public Material
+class PerfectSpecularCoatedMaterial : public SimpleReflectiveMaterial
 {
 public:
     PerfectSpecularCoatedMaterial(const glm::vec3& albedo, float ior) : albedo(albedo), ior{ior} {}

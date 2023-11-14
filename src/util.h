@@ -136,4 +136,64 @@ inline std::optional<float> intersectTriangleCounterClockwise(const glm::vec3& o
         std::nullopt;
 }
 
+inline std::optional<float> intersectTriangleMT(const glm::vec3& orig, const glm::vec3& dir, const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, glm::vec2& coords)
+{
+    using namespace glm;
+
+    vec3 ab = p2 - p0;
+    vec3 ac = p1 - p0;
+    vec3 pVec = cross(dir, ac);
+
+    float det = dot(ab, pVec);
+    if (det < 1e-6f)
+        return std::nullopt;
+    
+    float invDet = 1.0f / det;
+
+    vec3 tVec = orig - p0;
+    float u = dot(tVec, pVec) * invDet;
+    if (u < 0.0f || u > 1.0f)
+        return std::nullopt;
+    
+    vec3 qVec = cross(tVec, ab);
+    float v = dot(dir, qVec) * invDet;
+    if (v < 0.0f || u + v > 1.0f)
+        return std::nullopt;
+    
+    coords.x = v;
+    coords.y = u;
+
+    return dot(ac, qVec) * invDet;
+}
+
+inline std::optional<float> intersectTriangleCounterClockwiseMT(const glm::vec3& orig, const glm::vec3& dir, const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, glm::vec2& coords)
+{
+    using namespace glm;
+
+    vec3 ab = p1 - p0;
+    vec3 ac = p2 - p0;
+    vec3 pVec = cross(dir, ac);
+
+    float det = dot(ab, pVec);
+    if (det < 1e-6f)
+        return std::nullopt;
+    
+    float invDet = 1.0f / det;
+
+    vec3 tVec = orig - p0;
+    float u = dot(tVec, pVec) * invDet;
+    if (u < 0.0f || u > 1.0f)
+        return std::nullopt;
+    
+    vec3 qVec = cross(tVec, ab);
+    float v = dot(dir, qVec) * invDet;
+    if (v < 0.0f || u + v > 1.0f)
+        return std::nullopt;
+    
+    coords.x = u;
+    coords.y = v;
+
+    return dot(ac, qVec) * invDet;
+}
+
 }

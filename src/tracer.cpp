@@ -54,7 +54,7 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
     using namespace glm;
 
     vec3 color(0.0f);
-    vec3 through(1.0f);
+    vec3 throughput(1.0f);
 
     vec3 orig = _Orig;
     vec3 dir = _Dir;
@@ -64,13 +64,13 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
     for (uint32_t i = 0; i < config.rayTrace.maxDepth; i++)
     {
         bool inside = insideObj != nullptr;
-        
+
         HitResult hit{};
         scene.Trace(orig, dir, hit);
 
         if (!hit.valid)
         {
-            color += through * config.rayTrace.environmentColor;
+            color += throughput * config.rayTrace.environmentColor;
             break;
         }
 
@@ -83,20 +83,22 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         vec3 emissive;
         emissive = material->GetEmissivity(surface.texCoords);
 
-        color += through * emissive;
+        color += throughput * emissive;
 
         vec3 sample;
-        material->Shade(rng, dir, normal, surface.texCoords, sample, through, inside);
+        material->Shade(rng, dir, normal, surface.texCoords, sample, throughput, inside);
+        if (throughput == vec3(0.0f))
+            break;
 
         if (i >= config.rayTrace.minDepth)
         {
             // russian roulette
-            float p = max(through.r, max(through.g, through.b));
+            float p = max(throughput.r, max(throughput.g, throughput.b));
             if (rand() > p)
             //if (rand() > p)
                 break;
             
-            through *= 1.0f / p;
+            throughput *= 1.0f / p;
         }
         
         orig = biasedP;

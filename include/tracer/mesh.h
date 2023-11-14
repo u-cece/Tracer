@@ -35,6 +35,14 @@ class Mesh : public Object
 {
 public:
     static std::unique_ptr<Mesh> Create(std::string_view jsonStr);
+    void Transform(const glm::mat4& matrix)
+    {
+        for (Vertex& vertex : vertices)
+        {
+            glm::vec4 v = matrix * glm::vec4(vertex.pos, 1.0f);
+            vertex.pos = glm::vec3(v);
+        }
+    }
     virtual std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const override;
 private:
     enum class PrimitiveType

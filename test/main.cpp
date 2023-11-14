@@ -7,6 +7,8 @@
 #include <print>
 #include <ranges>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <tracer/camera.h>
 #include <tracer/canvas.h>
 #include <tracer/mesh.h>
@@ -35,7 +37,7 @@ int main()
     SimpleEmissiveMaterial emissive(white, bright);
 
     PerfectSpecularCoatedMaterial perfectSpecularCoatedMaterial(glm::vec3(0.73f), 1.5f);
-    SimpleReflectiveMaterial mirror;
+    SimpleMirrorMaterial mirror;
     SpecularCoatedMaterial specularRed(red, makeColor(glm::vec3(0.1f)), 1.5f);
     SpecularCoatedMaterial specularWhite(white, makeColor(glm::vec3(0.1f)), 1.5f);
     SpecularCoatedMaterial specularPeachpuff(peachpuff, makeColor(glm::vec3(0.02f)), 1.5f);
@@ -65,10 +67,25 @@ int main()
     front->SetMaterial(perfectSpecularCoatedMaterial);
     ceiling->SetMaterial(perfectSpecularCoatedMaterial);
 
-    std::ifstream lightFileStream("test.json");
+    glm::mat4 transform;
+    std::ifstream lightFileStream("light.json");
     std::string lightFile;
     lightFile.assign(std::istreambuf_iterator<char>(lightFileStream), std::istreambuf_iterator<char>());
     auto light = Mesh::Create(lightFile);
+    transform = glm::mat4(1.0f);
+    transform = glm::translate(transform, glm::vec3(0.0f, 1.9375f, 0.25f));
+    light->Transform(transform);
+
+    std::ifstream creeperFileStream("creeper.json");
+    std::string creeperFile;
+    creeperFile.assign(std::istreambuf_iterator<char>(creeperFileStream), std::istreambuf_iterator<char>());
+    auto creeper = Mesh::Create(creeperFile);
+    transform = glm::mat4(1.0f);
+    transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.5f));
+    transform = glm::rotate(transform, glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.0f));
+    transform = glm::scale(transform, glm::vec3(1.0f / 32.0f));
+    creeper->Transform(transform);
 
     std::unique_ptr sphere1 = std::make_unique<Sphere>(glm::vec3(-0.5f, 0.25f, 0.5f), 0.25f);
     sphere1->SetMaterial(gradientEmissive);
@@ -82,9 +99,10 @@ int main()
     objects.push_back(std::move(right));
     objects.push_back(std::move(front));
     objects.push_back(std::move(ceiling));
-    objects.push_back(std::move(sphere1));
-    objects.push_back(std::move(sphere2));
-    objects.push_back(std::move(sphere3));
+    // objects.push_back(std::move(sphere1));
+    // objects.push_back(std::move(sphere2));
+    // objects.push_back(std::move(sphere3));
+    objects.push_back(std::move(creeper));
     objects.push_back(std::move(light));
 
     Camera camera{};
