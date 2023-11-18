@@ -94,8 +94,7 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         {
             // russian roulette
             float p = max(throughput.r, max(throughput.g, throughput.b));
-            if (rand() > p)
-            //if (rand() > p)
+            if (rng.Uniform() > p)
                 break;
             
             throughput *= 1.0f / p;

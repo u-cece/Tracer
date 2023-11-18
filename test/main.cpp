@@ -9,6 +9,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <tracer/bvh.h>
 #include <tracer/camera.h>
 #include <tracer/canvas.h>
 #include <tracer/mesh.h>
@@ -18,6 +19,63 @@
 int main()
 {
     using namespace tracer;
+
+    struct AABBToAABB
+    {
+        AABB operator()(const AABB& box) const
+        {
+            return box;
+        }
+    };
+    struct AABBIntersectionResult
+    {
+        float distance{};
+    };
+    struct AABBIntersection
+    {
+        std::optional<AABBIntersectionResult> operator()(const AABB& box, const glm::vec3& orig, const glm::vec3& dir) const
+        {
+            std::optional<float> result = box.Intersect(orig, dir);
+            if (!result)
+                return std::nullopt;
+            return AABBIntersectionResult{result.value()};
+        }
+    };
+    struct AABBDistance
+    {
+        float operator()(const AABBIntersectionResult& result) const
+        {
+            return result.distance;
+        }
+    };
+
+    // std::mt19937 engine;
+    // std::uniform_real_distribution<float> distr(-10.0f, 10.0f);
+    // std::vector<AABB> boxes(1000000);
+    // std::ranges::generate(boxes, [&]
+    // {
+    //     glm::vec3 centroid = glm::vec3(distr(engine), distr(engine), distr(engine));
+    //     return AABB(
+    //         centroid - glm::vec3(0.5f),
+    //         centroid + glm::vec3(0.5f));
+    // });
+    // BVH<AABB, AABBToAABB> bvh(boxes);
+    // std::optional<AABBIntersectionResult> result = bvh.Intersect(
+    //     glm::vec3(-11.0f),
+    //     glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f)),
+    //     [](const AABB& box, const glm::vec3& orig, const glm::vec3& dir) -> std::optional<AABBIntersectionResult>
+    //     {
+    //         std::optional<float> result = box.Intersect(orig, dir);
+    //         if (!result)
+    //             return std::nullopt;
+    //         return AABBIntersectionResult{result.value()};
+    //     },
+    //     [](const AABBIntersectionResult& result)
+    //     {
+    //         return result.distance;
+    //     });
+    
+    // return 0;
 
     std::vector<std::unique_ptr<Object>> objects;
 
@@ -71,21 +129,19 @@ int main()
     std::ifstream lightFileStream("light.json");
     std::string lightFile;
     lightFile.assign(std::istreambuf_iterator<char>(lightFileStream), std::istreambuf_iterator<char>());
-    auto light = Mesh::Create(lightFile);
     transform = glm::mat4(1.0f);
     transform = glm::translate(transform, glm::vec3(0.0f, 1.9375f, 0.25f));
-    light->Transform(transform);
+    auto light = Mesh::Create(lightFile, transform);
 
     std::ifstream creeperFileStream("creeper.json");
     std::string creeperFile;
     creeperFile.assign(std::istreambuf_iterator<char>(creeperFileStream), std::istreambuf_iterator<char>());
-    auto creeper = Mesh::Create(creeperFile);
     transform = glm::mat4(1.0f);
     transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.5f));
     transform = glm::rotate(transform, glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.0f));
     transform = glm::scale(transform, glm::vec3(1.0f / 32.0f));
-    creeper->Transform(transform);
+    auto creeper = Mesh::Create(creeperFile, transform);
 
     std::unique_ptr sphere1 = std::make_unique<Sphere>(glm::vec3(-0.5f, 0.25f, 0.5f), 0.25f);
     sphere1->SetMaterial(gradientEmissive);
@@ -118,7 +174,9 @@ int main()
     TracerConfiguration config{};
     config.system.nThreads = 6u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nRaysPerPixel = 16u;
+    config.rayTrace.nRaysPerPixel = 1024u;
+    config.rayTrace.minDepth = 8u;
+    config.rayTrace.maxDepth = 16u;
     // config.lens.fov = glm::radians(90.0f);
     config.lens.fov = glm::radians(30.0f);
     //LensConfiguration::fromLensParams(config.lens, 0.035f, 0.022f, 1.0f, 12.0f);

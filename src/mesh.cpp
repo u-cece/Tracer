@@ -239,6 +239,7 @@ namespace
     {{"SimpleDiffuse", parseSimpleDiffuseMaterialJson}, {"SpecularCoated", parseSpecularCoatedMaterialJson}, {"SimpleEmissive", parseSimpleEmissiveMaterialJson}, {"PerfectRefractive", parsePerfectRefractiveMaterialJson}};
 
     void parsePrimitiveJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures,
+        const std::vector<Vertex>& vertices,
         std::back_insert_iterator<std::vector<std::unique_ptr<Material>>> materialsInserter,
         std::back_insert_iterator<std::vector<Triad>> triadsInserter)
     {
@@ -286,7 +287,13 @@ namespace
         for (const auto& [indices, materialIndex] : indicesToMaterialIndex)
         {
             Triad triad{};
-            triad.indices = indices;
+            for (uint32_t i = 0; i < 3; i++)
+            {
+                uint32_t index = indices[i];
+                if (index >= vertices.size())
+                    throw std::runtime_error("");
+                triad.vertices.at(i) = vertices.at(index);
+            }
             if (materialIndex >= materials.size())
                 throw std::runtime_error("");
             triad.material = materials.at(materialIndex).get();
@@ -298,7 +305,7 @@ namespace
 
 }
 
-std::unique_ptr<Mesh> Mesh::Create(std::string_view _jsonStr)
+std::unique_ptr<Mesh> Mesh::Create(std::string_view _jsonStr, const glm::mat4& transformation)
 {
     std::string jsonStr(_jsonStr);
     json jsonObj = json::parse(jsonStr);
@@ -331,24 +338,23 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _jsonStr)
     for (const json& obj : *elements.at(0))
         textures.push_back(parseTypedJson<std::shared_ptr<Texture>>(obj, typeNameToTextureFactory));
 
-    std::vector<std::unique_ptr<Material>> materials;
-    std::vector<Triad> triads;
-    for (const json& obj : *elements.at(1))
-    {
-        parsePrimitiveJson(obj, textures, std::back_inserter(materials), std::back_inserter(triads));
-    }
-
     std::vector<Vertex> vertices;
     for (const json& obj : *elements.at(2))
         vertices.push_back(parseVertexJson(obj));
 
-    // to-do: check if all the indices are within bounds
+    std::vector<std::unique_ptr<Material>> materials;
+    std::vector<Triad> triads;
+    for (const json& obj : *elements.at(1))
+    {
+        parsePrimitiveJson(obj, textures, vertices, std::back_inserter(materials), std::back_inserter(triads));
+    }
 
     std::unique_ptr<Mesh> mesh(new Mesh());
     mesh->cullMode = cullMode;
     mesh->materialHolder = std::move(materials);
     mesh->triads = std::move(triads);
-    mesh->vertices = std::move(vertices);
+
+    mesh->Transform(transformation);
 
     return mesh;
 }
@@ -357,12 +363,21 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
 {
     using namespace glm;
     
-    auto view = triads
-        | std::views::transform([&, this](const Triad& i) -> std::optional<std::pair<float, SurfaceData>>
+    assert(accelStruct.IsBuilt());
+
+    struct TriadIntersectionResult
+    {
+        SurfaceData surfaceData{};
+        float t{};
+    };
+    struct TriadIntersectionFunc
+    {
+        CullMode cullMode{};
+        std::optional<TriadIntersectionResult> operator()(const Triad& triad, const glm::vec3& orig, const glm::vec3& dir) const
         {
-            Vertex v0 = vertices.at(i.indices.x);
-            Vertex v1 = vertices.at(i.indices.y);
-            Vertex v2 = vertices.at(i.indices.z);
+            Vertex v0 = triad.vertices.at(0);
+            Vertex v1 = triad.vertices.at(1);
+            Vertex v2 = triad.vertices.at(2);
 
             vec3 p0 = v0.pos;
             vec3 p1 = v1.pos;
@@ -409,21 +424,28 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
             vec2 ab = t1 - t0;
             vec2 ac = t2 - t0;
             data.texCoords = t0 + ab * coords.x + ac * coords.y;
-            data.material = i.material;
-            return std::make_pair(t.value(), data);
-        })
-        | std::views::filter([](const std::optional<std::pair<float, SurfaceData>>& v) { return v.has_value(); })
-        | std::views::transform([](const std::optional<std::pair<float, SurfaceData>>& v) { return v.value(); });
-    
-    if (std::ranges::distance(view.begin(), view.end()) == 0)
-        return std::nullopt;
-
-    auto [t, data] = std::ranges::min(view, {}, [](const std::pair<float, SurfaceData>& v)
+            data.material = triad.material;
+            return TriadIntersectionResult{data, t.value()};
+        }
+    };
+    struct TriadDistanceFunc
     {
-        return v.first;
-    });
-    surfaceData = data;
-    return t;
+        float operator()(const TriadIntersectionResult& result) const
+        {
+            return result.t;
+        }
+    };
+
+    std::optional<TriadIntersectionResult> result =
+        accelStruct.Intersect(
+            orig, dir,
+            TriadIntersectionFunc{cullMode},
+            TriadDistanceFunc{}
+        );
+    if (!result)
+        return std::nullopt;
+    surfaceData = result.value().surfaceData;
+    return result.value().t;
 }
 
 }
