@@ -6,6 +6,7 @@
 
 #include <glm/glm.hpp>
 
+#include "emission_profile.h"
 #include "material.h"
 
 namespace tracer
@@ -56,9 +57,12 @@ public:
     //     return nullptr;
     // }
     virtual std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const = 0;
+    virtual void GetEmissionProfiles(std::back_insert_iterator<std::vector<std::unique_ptr<EmissionProfile>>> profilesInserter) const
+    {
+    }
     virtual ~Object() {}
 private:
-    using void_unique_ptr = std::unique_ptr<void, void(*)(const void*)>;
+    // using void_unique_ptr = std::unique_ptr<void, void(*)(const void*)>;
     // std::unordered_map<AttributeType, void_unique_ptr> attributes;
 };
 

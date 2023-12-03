@@ -19,8 +19,8 @@ struct RayTraceConfiguration
 {
     float bias = 1e-4f;
     glm::vec3 environmentColor{0.0f};
-    uint32_t minDepth = 3u;
-    uint32_t maxDepth = 16u;
+    uint32_t nMinBounces = 3u;
+    uint32_t nMaxBounces = 16u;
     uint32_t nRaysPerPixel = 16u;
 };
 

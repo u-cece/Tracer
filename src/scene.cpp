@@ -1,7 +1,33 @@
 #include <tracer/scene.h>
 
+#include <nlohmann/json.hpp>
+
+#include "util.h"
+
 namespace tracer
 {
+
+using json = nlohmann::json;
+
+std::unique_ptr<Scene> Scene::Create(std::string_view _path)
+{
+    std::string path(_path);
+    std::string jsonStr = readTextFile(path);
+    json jsonObj;
+    try
+    {
+        jsonObj = json::parse(jsonStr);
+    }
+    catch(const std::exception& e)
+    {
+        throw std::runtime_error("");
+    }
+
+    if (!jsonObj.is_object())
+        throw std::runtime_error("");
+
+    return nullptr;
+}
 
 void Scene::Trace(const glm::vec3& orig, const glm::vec3& dir, HitResult& hitResult) const
 {

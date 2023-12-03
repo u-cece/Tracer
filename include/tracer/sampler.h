@@ -10,10 +10,9 @@
 namespace tracer
 {
 
-glm::vec3 transformSampleToWorld(const glm::vec3& normal, const glm::vec3& sample);
+glm::vec3 transformLocalSampleToWorld(const glm::vec3& normal, const glm::vec3& sample);
 
-namespace samplers
-{
+glm::vec3 transformWorldSampleToLocal(const glm::vec3& normal, const glm::vec3& sample);
 
 inline void generateUniform(RNG& rng, glm::vec3& sample, float& pdf)
 {
@@ -39,8 +38,8 @@ inline void generateCosine(RNG& rng, glm::vec3& sample, float& pdf)
     float r1 = rng.Uniform();
     float r2 = rng.Uniform();
 
-    float cosTheta = sqrt(r1);
-    float sinTheta = sqrt(1.0f - cosTheta);
+    float cosTheta = sqrt(1.0f - r1);
+    float sinTheta = sqrt(r1);
     float phi = 2.0f * pi<float>() * r2;
     sample = normalize(vec3(
         sinTheta * cos(phi),
@@ -50,11 +49,14 @@ inline void generateCosine(RNG& rng, glm::vec3& sample, float& pdf)
     pdf = cosTheta / pi<float>();
 }
 
+inline float getCosinePdf(const glm::vec3& sample)
+{
+    return sample.y / glm::pi<float>();
+}
+
 inline void generateGgx(RNG& rng, glm::vec3& sample, float& pdf)
 {
     
-}
-
 }
 
 }

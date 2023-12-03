@@ -13,6 +13,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/color_space.hpp>
 
+#include <tracer/emission_profile.h>
 #include "util.h"
 
 namespace tracer
@@ -49,7 +50,7 @@ static glm::vec3 calcToFrustumPlane(const glm::vec2& on2DFrustumPlane, const glm
     return toFrustumPlane;
 }
 
-static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Scene& scene, const TracerConfiguration& config, RNG& rng)
+static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Scene& scene, const TracerConfiguration& config, RNG& rng, const std::vector<std::unique_ptr<EmissionProfile>>& emissionProfiles)
 {
     using namespace glm;
 
@@ -61,7 +62,8 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
 
     const Object* insideObj = nullptr;
 
-    for (uint32_t i = 0; i < config.rayTrace.maxDepth; i++)
+    uint32_t i = 0;
+    while (true)
     {
         bool inside = insideObj != nullptr;
 
@@ -85,12 +87,45 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
 
         color += throughput * emissive;
 
+        std::optional<glm::vec3> emissionSample;
+        std::vector<const EmissionProfile*> selectedProfiles;
+        // if (!emissionProfiles.empty())
+        // {
+        //     std::vector<EmissionSample> emissionSamples;
+        //     for (const auto& emission : emissionProfiles)
+        //     {
+        //         auto result = emission->Sample(rng, biasedP, normal);
+        //         if (!result)
+        //             continue;
+
+        //         EmissionSample emissionSample = result.value();
+        //         emissionSamples.push_back(emissionSample);
+        //         selectedProfiles.push_back(emission.get());
+        //     }
+        //     if (!emissionSamples.empty())
+        //     {
+        //         int selectedIndex = rng.Uniform(0, static_cast<uint32_t>(emissionSamples.size()) - 1);
+        //         vec3 sample = emissionSamples.at(selectedIndex).sample;
+        //         emissionSample = sample;
+        //     }
+        // }
+        std::function<float(const glm::vec3&)> emissionPdfFunc = [&](const glm::vec3& sample) -> float
+        {
+            float accumPdf = 0.0f;
+            for (const EmissionProfile* emission : selectedProfiles)
+                accumPdf += emission->GetPdf(point, sample);
+            return accumPdf / static_cast<float>(selectedProfiles.size());
+        };
+
         vec3 sample;
-        material->Shade(rng, dir, normal, surface.texCoords, sample, throughput, inside);
-        if (throughput == vec3(0.0f))
+        bool generateNewRays = material->Shade(rng, dir, normal, surface.texCoords, emissionSample, emissionPdfFunc, sample, throughput, inside);
+        if (!generateNewRays)
             break;
 
-        if (i >= config.rayTrace.minDepth)
+        if (i++ == config.rayTrace.nMaxBounces)
+            break;
+
+        if (i > config.rayTrace.nMinBounces)
         {
             // russian roulette
             float p = max(throughput.r, max(throughput.g, throughput.b));
@@ -111,6 +146,12 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
     assert(canvas.GetChannelCount() == 3);
 
     using namespace glm;
+
+    std::vector<std::unique_ptr<EmissionProfile>> emissionProfiles;
+    for (const Object* obj : scene.GetObjects())
+    {
+        obj->GetEmissionProfiles(std::back_inserter(emissionProfiles));
+    }
 
     u32vec2 dim(canvas.GetWidth(), canvas.GetHeight());
     uint64_t nPixels = dim.x * dim.y;
@@ -159,7 +200,7 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
                 vec2 diskSample = samplePointOnDisk(r1, r2);
                 vec3 defocused = (diskSample.x * axis1 + diskSample.y * axis2) * config.lens.defocusDiskRadius;
                 
-                vec3 rayColor = castRay(camera.pos + defocused, normalize(focusPoint - defocused), scene, config, rng);
+                vec3 rayColor = castRay(camera.pos + defocused, normalize(focusPoint - defocused), scene, config, rng, emissionProfiles);
                 if (!std::isnan(rayColor.x) &&
                     !std::isnan(rayColor.y) &&
                     !std::isnan(rayColor.z))

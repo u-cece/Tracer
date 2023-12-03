@@ -3,6 +3,7 @@ add_library(tracer
             ${PROJECT_SOURCE_DIR}/include/tracer/bvh.h
             ${PROJECT_SOURCE_DIR}/include/tracer/camera.h
             ${PROJECT_SOURCE_DIR}/include/tracer/canvas.h
+            ${PROJECT_SOURCE_DIR}/include/tracer/emission_profile.h
             ${PROJECT_SOURCE_DIR}/include/tracer/material.h
             ${PROJECT_SOURCE_DIR}/include/tracer/mesh.h
             ${PROJECT_SOURCE_DIR}/include/tracer/object.h

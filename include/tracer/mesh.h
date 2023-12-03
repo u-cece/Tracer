@@ -38,6 +38,12 @@ struct TriadBoxFunc
     }
 };
 
+struct LightInfo
+{
+    std::unique_ptr<std::array<glm::vec3, 3>[]> triads;
+    uint32_t nTriads;
+};
+
 enum class CullMode // front = clockwise, back = counter-clockwise
 {
     None, Front, Back
@@ -46,20 +52,26 @@ enum class CullMode // front = clockwise, back = counter-clockwise
 class Mesh : public Object
 {
 public:
-    static std::unique_ptr<Mesh> Create(std::string_view jsonStr, const glm::mat4& transformation = {});
+    static std::unique_ptr<Mesh> Create(std::string_view path, const glm::mat4& transformation = {});
     void Transform(const glm::mat4& matrix)
     {
         for (Triad& triad : triads)
-        {
             for (Vertex& vertex : triad.vertices)
             {
                 glm::vec4 v = matrix * glm::vec4(vertex.pos, 1.0f);
                 vertex.pos = glm::vec3(v);
             }
-        }
         accelStruct.Build(triads);
+        for (LightInfo& lightInfo : lightInfos)
+            for (uint32_t i = 0; i < lightInfo.nTriads; i++)
+                for (uint32_t j = 0; j < 3; j++)
+                {
+                    glm::vec4 v = matrix * glm::vec4(lightInfo.triads[i][j], 1.0f);
+                    lightInfo.triads[i][j] = glm::vec3(v);
+                }
     }
     virtual std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const override;
+    virtual void GetEmissionProfiles(std::back_insert_iterator<std::vector<std::unique_ptr<EmissionProfile>>> profilesInserter) const override;
 private:
     enum class PrimitiveType
     {
@@ -72,6 +84,8 @@ private:
     std::vector<Triad> triads;
     BVH<Triad, TriadBoxFunc> accelStruct;
     CullMode cullMode;
+
+    std::vector<LightInfo> lightInfos;
 };
 
 }

@@ -1,9 +1,13 @@
 #pragma once
 
+#include <fstream>
 #include <optional>
+#include <string>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
+
+#include <tracer/rng.h>
 
 namespace tracer
 {
@@ -194,6 +198,44 @@ inline std::optional<float> intersectTriangleCounterClockwiseMT(const glm::vec3&
     coords.y = v;
 
     return dot(ac, qVec) * invDet;
+}
+
+inline void sampleBarycentricUniform(RNG& rng, glm::vec2& coords)
+{
+    using namespace glm;
+
+    float r1 = rng.Uniform();
+    float r2 = rng.Uniform();
+
+    float sqrtR1 = sqrt(r1);
+    coords.x = 1.0f - sqrtR1;
+    coords.y = r2 * sqrtR1;
+}
+
+inline void sampleTriangleUniform(RNG& rng, const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, glm::vec3& sample, float& pdf)
+{
+    using namespace glm;
+
+    vec2 coords;
+    sampleBarycentricUniform(rng, coords);
+    
+    vec3 ab = p1 - p0;
+    vec3 ac = p2 - p0;
+
+    sample = (ab * coords.x + ac * coords.y) / 2.0f + p0;
+
+    float area = length(cross(ab, ac)) / 2.0f;
+    pdf = 1.0f / area;
+}
+
+inline std::string readTextFile(const std::string& path)
+{
+    std::ifstream stream(path, std::ios::ate);
+    size_t size = stream.tellg();
+    std::string str(size, '\0');
+    stream.seekg(0);
+    stream.read(str.data(), size);
+    return str;
 }
 
 }

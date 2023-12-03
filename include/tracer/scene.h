@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <memory>
 #include <ranges>
+#include <string_view>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -25,6 +26,7 @@ struct HitResult
 class Scene
 {
 public:
+    static std::unique_ptr<Scene> Create(std::string_view path);
     Scene() {}
     template <std::ranges::input_range Range>
         requires (

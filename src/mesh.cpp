@@ -212,22 +212,19 @@ namespace
 
     std::unique_ptr<Material> parseSimpleEmissiveMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        auto required = {"type", "diffuse-texture", "emissive-texture", "multiplier"};
+        auto required = {"type", "emissive-texture", "multiplier"};
         std::vector<json::const_iterator> elements;
         findRequiredFields(obj, required, std::back_inserter(elements));
 
         if (!elements.at(1)->is_number_integer())
             throw std::runtime_error("");
-        if (!elements.at(2)->is_number_integer())
-            throw std::runtime_error("");
-        if (!elements.at(3)->is_number())
+        if (!elements.at(2)->is_number())
             throw std::runtime_error("");
         
-        const auto& diffuse = parseTextureIndexJson(*elements.at(1), textures);
-        const auto& emissive = parseTextureIndexJson(*elements.at(2), textures);
-        float multiplier = elements.at(3)->get<float>();
+        const auto& emissive = parseTextureIndexJson(*elements.at(1), textures);
+        float multiplier = elements.at(2)->get<float>();
 
-        return std::make_unique<SimpleEmissiveMaterial>(diffuse, emissive, multiplier);
+        return std::make_unique<SimpleEmissiveMaterial>(emissive, multiplier);
     }
 
     std::unique_ptr<Material> parsePerfectRefractiveMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
@@ -238,10 +235,22 @@ namespace
     std::unordered_map<std::string, std::function<std::unique_ptr<Material>(const json&, const std::vector<std::shared_ptr<Texture>>&)>> typeNameToMaterialFactory
     {{"SimpleDiffuse", parseSimpleDiffuseMaterialJson}, {"SpecularCoated", parseSpecularCoatedMaterialJson}, {"SimpleEmissive", parseSimpleEmissiveMaterialJson}, {"PerfectRefractive", parsePerfectRefractiveMaterialJson}};
 
+    std::unordered_map<
+        std::string, std::function<
+            void(
+                const json&,
+                const std::vector<std::shared_ptr<Texture>>&,
+                const std::vector<Vertex>&, std::back_insert_iterator<std::vector<std::unique_ptr<Material>>>,
+                std::back_insert_iterator<std::vector<Triad>>,
+                std::optional<LightInfo>&
+            )>> typeNameToPrimitiveFactory
+    {};
+
     void parsePrimitiveJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures,
         const std::vector<Vertex>& vertices,
         std::back_insert_iterator<std::vector<std::unique_ptr<Material>>> materialsInserter,
-        std::back_insert_iterator<std::vector<Triad>> triadsInserter)
+        std::back_insert_iterator<std::vector<Triad>> triadsInserter,
+        std::optional<LightInfo>& lightInfo)
     {
         if (!obj.is_object())
             throw std::runtime_error("");
@@ -284,6 +293,8 @@ namespace
             materials.push_back(parseTypedJson<std::unique_ptr<Material>>(obj, typeNameToMaterialFactory, textures));
         }
 
+        std::vector<std::array<glm::vec3, 3>> emissiveTriads;
+
         for (const auto& [indices, materialIndex] : indicesToMaterialIndex)
         {
             Triad triad{};
@@ -298,6 +309,26 @@ namespace
                 throw std::runtime_error("");
             triad.material = materials.at(materialIndex).get();
             *triadsInserter = triad;
+
+            if (triad.material->IsEmissive())
+            {
+                std::array<glm::vec3, 3> triadPos;
+                for (uint32_t i = 0; i < 3; i++)
+                    triadPos.at(i) = triad.vertices.at(i).pos;
+                emissiveTriads.push_back(triadPos);
+            }
+        }
+
+        if (!emissiveTriads.empty())
+        {
+            LightInfo info{};
+            info.nTriads = static_cast<uint32_t>(emissiveTriads.size());
+            info.triads = std::make_unique<std::array<glm::vec3, 3>[]>(emissiveTriads.size());
+            for (uint32_t i = 0; i < info.nTriads; i++)
+            {
+                info.triads[i] = emissiveTriads.at(i);
+            }
+            lightInfo.emplace(std::move(info));
         }
 
         std::ranges::copy(materials | std::views::as_rvalue, materialsInserter);
@@ -305,10 +336,19 @@ namespace
 
 }
 
-std::unique_ptr<Mesh> Mesh::Create(std::string_view _jsonStr, const glm::mat4& transformation)
+std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& transformation)
 {
-    std::string jsonStr(_jsonStr);
-    json jsonObj = json::parse(jsonStr);
+    std::string path(_path);
+    std::string jsonStr = readTextFile(path);
+    json jsonObj;
+    try
+    {
+        jsonObj = json::parse(jsonStr);
+    }
+    catch(const std::exception& e)
+    {
+        throw std::runtime_error("");
+    }
 
     if (!jsonObj.is_object())
         throw std::runtime_error("");
@@ -344,15 +384,20 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _jsonStr, const glm::mat4& t
 
     std::vector<std::unique_ptr<Material>> materials;
     std::vector<Triad> triads;
+    std::vector<LightInfo> lightInfos;
     for (const json& obj : *elements.at(1))
     {
-        parsePrimitiveJson(obj, textures, vertices, std::back_inserter(materials), std::back_inserter(triads));
+        std::optional<LightInfo> lightInfo;
+        parsePrimitiveJson(obj, textures, vertices, std::back_inserter(materials), std::back_inserter(triads), lightInfo);
+        if (lightInfo)
+            lightInfos.push_back(std::move(lightInfo.value()));
     }
 
     std::unique_ptr<Mesh> mesh(new Mesh());
     mesh->cullMode = cullMode;
     mesh->materialHolder = std::move(materials);
     mesh->triads = std::move(triads);
+    mesh->lightInfos = std::move(lightInfos);
 
     mesh->Transform(transformation);
 
@@ -446,6 +491,112 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
         return std::nullopt;
     surfaceData = result.value().surfaceData;
     return result.value().t;
+}
+
+void Mesh::GetEmissionProfiles(std::back_insert_iterator<std::vector<std::unique_ptr<EmissionProfile>>> profilesInserter) const
+{
+    struct TriadsEmissionProfile : public EmissionProfile
+    {
+        const LightInfo& lightInfo;
+        CullMode cullMode;
+        TriadsEmissionProfile(const LightInfo& lightInfo, CullMode cullMode) : lightInfo(lightInfo), cullMode(cullMode)
+        {
+        }
+        std::optional<EmissionSample> Sample(RNG& rng, const glm::vec3& orig, const glm::vec3& pNorm) const override
+        {
+            using namespace glm;
+
+            bool doubleFaced = cullMode == CullMode::None;
+            
+            std::vector<vec3> samples;
+            std::vector<vec3> normals;
+            for (uint32_t i = 0; i < lightInfo.nTriads; i++)
+            {
+                vec3 normal;
+                vec3 ab = lightInfo.triads[i].at(1) - lightInfo.triads[i].at(0);
+                vec3 ac = lightInfo.triads[i].at(2) - lightInfo.triads[i].at(0);
+                if (cullMode == CullMode::Front)
+                    normal = cross(ab, ac);
+                else
+                    normal = cross(ac, ab);
+                normal = normalize(normal);
+
+                vec3 sample;
+                float pdf;
+                sampleTriangleUniform(rng, lightInfo.triads[i].at(0), lightInfo.triads[i].at(1), lightInfo.triads[i].at(2), sample, pdf);
+
+                vec3 dir = normalize(sample - orig);
+
+                samples.push_back(dir);
+                normals.push_back(normal);
+            }
+
+            if (samples.empty())
+                return std::nullopt;
+
+            int selectedIndex = rng.Uniform(0, static_cast<uint32_t>(samples.size()) - 1);
+            vec3 sample = samples.at(selectedIndex);
+            vec3 normal = normals.at(selectedIndex);
+
+            if (!doubleFaced && dot(-sample, normal) <= 0.0f)
+                return std::nullopt;
+            if (dot(sample, pNorm) <= 0.0f)
+                return std::nullopt;
+
+            EmissionSample emissionSample{};
+            emissionSample.sample = sample;
+
+            return emissionSample;
+        }
+        virtual float GetPdf(const glm::vec3& orig, const glm::vec3& dir) const override
+        {
+            float accumPdf = 0.0f;
+            for (uint32_t i = 0; i < lightInfo.nTriads; i++)
+            {
+                auto points = lightInfo.triads[i];
+                glm::vec3 p0 = points.at(0);
+                glm::vec3 p1 = points.at(1);
+                glm::vec3 p2 = points.at(2);
+                glm::vec2 coords;
+                std::optional<float> t;
+                glm::vec3 normal;
+                if (cullMode == CullMode::None)
+                {
+                    t = intersectTriangleMT(orig, dir, p0, p1, p2, coords);
+                    bool clockwise;
+                    if (!(clockwise = t.has_value()))
+                        t = intersectTriangleCounterClockwiseMT(orig, dir, p0, p1, p2, coords);
+                    if (!t)
+                        continue;
+                    normal = clockwise ?
+                    cross(p2 - p0, p1 - p0) :
+                    cross(p1 - p0, p2 - p0);
+                }
+                else if (cullMode == CullMode::Back)
+                {
+                    t = intersectTriangleMT(orig, dir, p0, p1, p2, coords);
+                    if (!t)
+                        continue;
+                    normal = cross(p2 - p0, p1 - p0);
+                }
+                else if (cullMode == CullMode::Front)
+                {
+                    t = intersectTriangleCounterClockwiseMT(orig, dir, p0, p1, p2, coords);
+                    if (!t)
+                        continue;
+                    normal = cross(p1 - p0, p2 - p0);
+                }
+                normal = normalize(normal);
+                float distance = t.value();
+                float area = 0.5f * length(cross(p1 - p0, p2 - p0));
+                accumPdf += distance * distance / (abs(dot(-dir, normal)) * area);
+            }
+
+            return accumPdf / static_cast<float>(lightInfo.nTriads);
+        }
+    };
+    for (const LightInfo& lightInfo : lightInfos)
+        *profilesInserter = std::make_unique<TriadsEmissionProfile>(lightInfo, cullMode);
 }
 
 }

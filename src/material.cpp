@@ -7,39 +7,62 @@
 namespace tracer
 {
 
-void SimpleReflectiveMaterial::Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const
+bool SimpleReflectiveMaterial::Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const
 {
     using namespace glm;
 
     float pdf;
     vec3 brdf;
-    SampleAndCalcBrdf(rng, rayDir, normal, texCoords, wi, pdf, brdf);
-    attenuation *= brdf * dot(wi, normal) / pdf;
+    SampleAndCalcBrdf(rng, rayDir, normal, texCoords, lightSample, lightSamplePdfFunc, wi, pdf, brdf);
+    float cosTerm = dot(wi, normal);
+    if (cosTerm < 0.0f)
+        cosTerm = 0.0f;
+    attenuation *= brdf * cosTerm / pdf;
+
+    return true;
 }
 
-void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
 
-    vec3 localSample;
-    samplers::generateCosine(rng, localSample, pdf);
-    sample = transformSampleToWorld(normal, localSample);
+    if (lightSample)
+    {
+        float p = 0.5f;
+        float cosinePdf;
+        if (rng.Uniform() < p)
+        {
+            sample = lightSample.value();
+            cosinePdf = getCosinePdf(transformWorldSampleToLocal(normal, sample));
+        }
+        else
+        {
+            vec3 localSample;
+            generateCosine(rng, localSample, cosinePdf);
+            sample = transformLocalSampleToWorld(normal, localSample);
+        }
+        float lightPdf = lightSamplePdfFunc(sample);
+
+        pdf = cosinePdf * (1.0f - p) + lightPdf * p;
+    }
+    else
+    {
+        vec3 localSample;
+        float cosinePdf;
+        generateCosine(rng, localSample, cosinePdf);
+        vec3 cosineSample = transformLocalSampleToWorld(normal, localSample);
+        sample = cosineSample;
+        pdf = cosinePdf;
+    }
 
     brdf = texture->SampleOptional(texCoords) / pi<float>();
 }
 
-glm::vec3 calcMirroredRay(const glm::vec3& in, const glm::vec3& normal)
-{
-    using namespace glm;
-    vec3 b = dot(-in, normal) * normal;
-    return in + 2.0f * b;
-}
-
-void SimpleMirrorMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void SimpleMirrorMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
 
-    sample = calcMirroredRay(rayDir, normal);
+    sample = reflect(rayDir, normal);
 
     pdf = 1.0f;
 
@@ -96,13 +119,13 @@ static float fresnel(float n, float cosine)
     return (r_s + r_p) / 2.0f;
 }
 
-void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
 
     vec3 localSample;
-    samplers::generateUniform(rng, localSample, pdf);
-    sample = transformSampleToWorld(normal, localSample);
+    generateUniform(rng, localSample, pdf);
+    sample = transformLocalSampleToWorld(normal, localSample);
 
     vec3 half = normalize(sample - rayDir);
 
@@ -120,7 +143,7 @@ void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir
     brdf = (1.0f - f) * albedo / pi<float>() + specular;
 }
 
-void PerfectSpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void PerfectSpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
 {
     using namespace glm;
 
@@ -128,14 +151,40 @@ void PerfectSpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3&
 
     if (rng.Uniform() < f)
     {
-        sample = calcMirroredRay(rayDir, normal);
+        sample = reflect(rayDir, normal);
         pdf = 1.0f;
         brdf = vec3(1.0f) / dot(sample, normal);
         return;
     }
     
-    samplers::generateCosine(rng, sample, pdf);
-    sample = transformSampleToWorld(normal, sample);
+    if (lightSample)
+    {
+        float p = 0.5f;
+        float cosinePdf;
+        if (rng.Uniform() < p)
+        {
+            sample = lightSample.value();
+            cosinePdf = getCosinePdf(transformWorldSampleToLocal(normal, sample));
+        }
+        else
+        {
+            vec3 localSample;
+            generateCosine(rng, localSample, cosinePdf);
+            sample = transformLocalSampleToWorld(normal, localSample);
+        }
+        float lightPdf = lightSamplePdfFunc(sample);
+
+        pdf = cosinePdf * (1.0f - p) + lightPdf * p;
+    }
+    else
+    {
+        vec3 localSample;
+        float cosinePdf;
+        generateCosine(rng, localSample, cosinePdf);
+        vec3 cosineSample = transformLocalSampleToWorld(normal, localSample);
+        sample = cosineSample;
+        pdf = cosinePdf;
+    }
 
     brdf = albedo / pi<float>();
 }

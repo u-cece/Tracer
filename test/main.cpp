@@ -1,7 +1,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <fstream>
 #include <iostream>
 #include <memory>
 #include <print>
@@ -20,63 +19,6 @@ int main()
 {
     using namespace tracer;
 
-    struct AABBToAABB
-    {
-        AABB operator()(const AABB& box) const
-        {
-            return box;
-        }
-    };
-    struct AABBIntersectionResult
-    {
-        float distance{};
-    };
-    struct AABBIntersection
-    {
-        std::optional<AABBIntersectionResult> operator()(const AABB& box, const glm::vec3& orig, const glm::vec3& dir) const
-        {
-            std::optional<float> result = box.Intersect(orig, dir);
-            if (!result)
-                return std::nullopt;
-            return AABBIntersectionResult{result.value()};
-        }
-    };
-    struct AABBDistance
-    {
-        float operator()(const AABBIntersectionResult& result) const
-        {
-            return result.distance;
-        }
-    };
-
-    // std::mt19937 engine;
-    // std::uniform_real_distribution<float> distr(-10.0f, 10.0f);
-    // std::vector<AABB> boxes(1000000);
-    // std::ranges::generate(boxes, [&]
-    // {
-    //     glm::vec3 centroid = glm::vec3(distr(engine), distr(engine), distr(engine));
-    //     return AABB(
-    //         centroid - glm::vec3(0.5f),
-    //         centroid + glm::vec3(0.5f));
-    // });
-    // BVH<AABB, AABBToAABB> bvh(boxes);
-    // std::optional<AABBIntersectionResult> result = bvh.Intersect(
-    //     glm::vec3(-11.0f),
-    //     glm::normalize(glm::vec3(1.0f, 1.0f, 1.0f)),
-    //     [](const AABB& box, const glm::vec3& orig, const glm::vec3& dir) -> std::optional<AABBIntersectionResult>
-    //     {
-    //         std::optional<float> result = box.Intersect(orig, dir);
-    //         if (!result)
-    //             return std::nullopt;
-    //         return AABBIntersectionResult{result.value()};
-    //     },
-    //     [](const AABBIntersectionResult& result)
-    //     {
-    //         return result.distance;
-    //     });
-    
-    // return 0;
-
     std::vector<std::unique_ptr<Object>> objects;
 
     auto makeColor = [](const glm::vec3& color) { return std::make_shared<SimpleGradientTexture>(color); };
@@ -92,21 +34,17 @@ int main()
     SimpleDiffuseMaterial whiteDiffuse(white);
     SimpleDiffuseMaterial redDiffuse(red);
     SimpleDiffuseMaterial greenDiffuse(green);
-    SimpleEmissiveMaterial emissive(white, bright);
+    SimpleEmissiveMaterial emissive(bright);
 
     PerfectSpecularCoatedMaterial perfectSpecularCoatedMaterial(glm::vec3(0.73f), 1.5f);
     SimpleMirrorMaterial mirror;
     SpecularCoatedMaterial specularRed(red, makeColor(glm::vec3(0.1f)), 1.5f);
     SpecularCoatedMaterial specularWhite(white, makeColor(glm::vec3(0.1f)), 1.5f);
-    SpecularCoatedMaterial specularPeachpuff(peachpuff, makeColor(glm::vec3(0.02f)), 1.5f);
+    SpecularCoatedMaterial specularPeachpuff(peachpuff, makeColor(glm::vec3(0.1f)), 1.5f);
 
     std::shared_ptr gradient = std::make_shared<SimpleGradientTexture>(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
     SimpleDiffuseMaterial gradientDiffuse(gradient);
-    SimpleEmissiveMaterial gradientEmissive(black, gradient, 10.0f);
-
-    std::shared_ptr image = std::make_shared<ImageTexture>("ref14.png");
-    SimpleDiffuseMaterial texturedDiffuse(image);
-    SimpleEmissiveMaterial texturedEmissive(black, image, 10.0f);
+    SimpleEmissiveMaterial gradientEmissive(gradient, 10.0f);
 
     std::unique_ptr floor = std::make_unique<Plane>(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     floor->SetMaterial(whiteDiffuse);
@@ -114,34 +52,43 @@ int main()
     left->SetMaterial(redDiffuse);
     std::unique_ptr right = std::make_unique<Plane>(glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     right->SetMaterial(greenDiffuse);
-    std::unique_ptr front = std::make_unique<Plane>(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-    front->SetMaterial(whiteDiffuse);
+    std::unique_ptr back = std::make_unique<Plane>(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+    back->SetMaterial(whiteDiffuse);
     std::unique_ptr ceiling = std::make_unique<Plane>(glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
     ceiling->SetMaterial(whiteDiffuse);
 
     floor->SetMaterial(perfectSpecularCoatedMaterial);
     left->SetMaterial(perfectSpecularCoatedMaterial);
     right->SetMaterial(perfectSpecularCoatedMaterial);
-    front->SetMaterial(perfectSpecularCoatedMaterial);
+    back->SetMaterial(perfectSpecularCoatedMaterial);
     ceiling->SetMaterial(perfectSpecularCoatedMaterial);
 
     glm::mat4 transform;
-    std::ifstream lightFileStream("light.json");
-    std::string lightFile;
-    lightFile.assign(std::istreambuf_iterator<char>(lightFileStream), std::istreambuf_iterator<char>());
     transform = glm::mat4(1.0f);
-    transform = glm::translate(transform, glm::vec3(0.0f, 1.9375f, 0.25f));
-    auto light = Mesh::Create(lightFile, transform);
+    transform = glm::translate(transform, glm::vec3(0.0f, 2.0f, 0.0f));
+    auto ceilingLight = Mesh::Create("light.json", transform);
 
-    std::ifstream creeperFileStream("creeper.json");
-    std::string creeperFile;
-    creeperFile.assign(std::istreambuf_iterator<char>(creeperFileStream), std::istreambuf_iterator<char>());
+    transform = glm::mat4(1.0f);
+    transform = glm::translate(transform, glm::vec3(0.0f, 1.0f, 1.0f));
+    transform = glm::rotate(transform, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    auto backLight = Mesh::Create("light.json", transform);
+
+    transform = glm::mat4(1.0f);
+    transform = glm::translate(transform, glm::vec3(-1.0f, 1.0f, 0.0f));
+    transform = glm::rotate(transform, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    auto leftLight = Mesh::Create("light.json", transform);
+
+    transform = glm::mat4(1.0f);
+    transform = glm::translate(transform, glm::vec3(1.0f, 1.0f, 0.0f));
+    transform = glm::rotate(transform, glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    auto rightLight = Mesh::Create("light.json", transform);
+
     transform = glm::mat4(1.0f);
     transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.5f));
     transform = glm::rotate(transform, glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.0f));
     transform = glm::scale(transform, glm::vec3(1.0f / 32.0f));
-    auto creeper = Mesh::Create(creeperFile, transform);
+    auto creeper = Mesh::Create("creeper.json", transform);
 
     std::unique_ptr sphere1 = std::make_unique<Sphere>(glm::vec3(-0.5f, 0.25f, 0.5f), 0.25f);
     sphere1->SetMaterial(gradientEmissive);
@@ -153,13 +100,16 @@ int main()
     objects.push_back(std::move(floor));
     objects.push_back(std::move(left));
     objects.push_back(std::move(right));
-    objects.push_back(std::move(front));
+    objects.push_back(std::move(back));
     objects.push_back(std::move(ceiling));
     // objects.push_back(std::move(sphere1));
     // objects.push_back(std::move(sphere2));
     // objects.push_back(std::move(sphere3));
     objects.push_back(std::move(creeper));
-    objects.push_back(std::move(light));
+    objects.push_back(std::move(ceilingLight));
+    objects.push_back(std::move(backLight));
+    objects.push_back(std::move(leftLight));
+    objects.push_back(std::move(rightLight));
 
     Camera camera{};
     // camera.yaw = glm::radians(0.0f);
@@ -168,18 +118,18 @@ int main()
     camera.yaw = glm::radians(0.0f);
     camera.pitch = glm::radians(0.0f);
     camera.pos = glm::vec3(0.0f, 1.0f, -4.0f);
-    Canvas canvas(1024, 1024, 3);
+    Canvas canvas(1200, 800, 3);
     Scene scene;
     scene.AddObjects(objects | std::views::as_rvalue);
     TracerConfiguration config{};
     config.system.nThreads = 6u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nRaysPerPixel = 1024u;
-    config.rayTrace.minDepth = 8u;
-    config.rayTrace.maxDepth = 16u;
+    config.rayTrace.nRaysPerPixel = 16u;
+    config.rayTrace.nMinBounces = 8u;
+    config.rayTrace.nMaxBounces = 16u;
     // config.lens.fov = glm::radians(90.0f);
-    config.lens.fov = glm::radians(30.0f);
-    //LensConfiguration::fromLensParams(config.lens, 0.035f, 0.022f, 1.0f, 12.0f);
+    // config.lens.fov = glm::radians(30.0f);
+    LensConfiguration::fromLensParams(config.lens, 0.018f, 0.022f, 1.8f, 4.0f);
     Tracer tracer(config);
 
     auto before = std::chrono::high_resolution_clock::now();
