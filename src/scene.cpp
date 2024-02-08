@@ -18,7 +18,7 @@ std::unique_ptr<Scene> Scene::Create(std::string_view _path)
     {
         jsonObj = json::parse(jsonStr);
     }
-    catch(const std::exception& e)
+    catch(const std::exception&)
     {
         throw std::runtime_error("");
     }

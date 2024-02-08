@@ -8,8 +8,7 @@
 #include <ranges>
 #include <unordered_map>
 
-#include <nlohmann/json.hpp>
-
+#include "json_helper.h"
 #include "util.h"
 
 namespace tracer
@@ -21,106 +20,42 @@ using json = nlohmann::json;
 namespace
 {
 
-    template <std::ranges::input_range Range, typename It>
-        requires std::is_convertible_v<std::ranges::range_value_t<Range>, std::string>
-    void findRequiredFields(const json& obj, Range&& range, It backInserter)
-    {
-        auto elements = range
-            | std::views::transform([&](const auto& str)
-            {
-                return obj.find(str);
-            })
-            | std::ranges::to<std::vector>();
-        if (std::ranges::find(elements, obj.end()) != elements.end()) // if any of the elements is missing, throw
-            throw std::runtime_error("");
-        for (auto it = obj.begin(); it != obj.end(); it++) // if any other element exists, throw
-            if (std::ranges::find(elements, it) == elements.end())
-                throw std::runtime_error("");
-        
-        for (json::const_iterator it : elements)
-            *backInserter = it;
-    }
-
-    template <typename T, typename Container, typename... Args>
-    T parseTypedJson(const json& obj, Container typeNameToFactory, Args... args)
-    {
-        if (!obj.is_object())
-            throw std::runtime_error("");
-        
-        auto typeIt = obj.find("type");
-        if (typeIt == obj.end() || !typeIt->is_string())
-            throw std::runtime_error("");
-        
-        std::string type = typeIt->get<std::string>();
-        if (!typeNameToFactory.contains(type))
-            throw std::runtime_error("");
-
-        return typeNameToFactory.at(type)(obj, std::forward<Args>(args)...);
-    }
-
-    template <uint32_t vecLength>
-    auto parseVecJson(const json& obj)
-    {
-        if (!obj.is_array())
-            throw std::runtime_error("");
-        
-        for (const json& v : obj)
-            if (!v.is_number())
-                throw std::runtime_error("");
-
-        auto container = obj.get<std::vector<float>>();
-        if (container.size() != vecLength)
-            throw std::runtime_error("");
-        
-        glm::vec<vecLength, float, glm::defaultp> vec;
-        for (auto [i, v] : container | std::views::enumerate)
-            vec[static_cast<uint32_t>(i)] = v;
-        
-        return vec;
-    }
-
     std::shared_ptr<Texture> parseGradientTextureJson(const json& obj)
     {
-        std::vector<json::const_iterator> elements;
-        auto required = {"type", "top-left", "top-right", "bottom-right", "bottom-left"};
-        findRequiredFields(obj, required, std::back_inserter(elements));
-
-        if (std::find_if_not(elements.begin() + 1, elements.end(), [](auto it) { return it->is_array(); }) != elements.end()) // if any of them isn't an array
-            throw std::runtime_error("");
+        TypedObjectParser parser;
+        parser.RegisterField("top-left", JsonFieldType::Array);
+        parser.RegisterField("top-right", JsonFieldType::Array);
+        parser.RegisterField("bottom-right", JsonFieldType::Array);
+        parser.RegisterField("bottom-left", JsonFieldType::Array);
+        auto result = parser.Parse(obj);
         
         glm::vec3 topL, topR, botR, botL;
-        topL = parseVecJson<3>(*elements.at(1));
-        topR = parseVecJson<3>(*elements.at(2));
-        botR = parseVecJson<3>(*elements.at(3));
-        botL = parseVecJson<3>(*elements.at(4));
+        topL = parseVecJson<3>(result.Get(0));
+        topR = parseVecJson<3>(result.Get(1));
+        botR = parseVecJson<3>(result.Get(2));
+        botL = parseVecJson<3>(result.Get(3));
 
         return std::make_shared<SimpleGradientTexture>(topL, topR, botR, botL);
     }
 
     std::shared_ptr<Texture> parsePlainColorTextureJson(const json& obj)
     {
-        std::vector<json::const_iterator> elements;
-        auto required = {"type", "color"};
-        findRequiredFields(obj, required, std::back_inserter(elements));
-
-        if (!elements.at(1)->is_array())
-            throw std::runtime_error("");
+        TypedObjectParser parser;
+        parser.RegisterField("color", JsonFieldType::String);
+        auto result = parser.Parse(obj);
         
-        glm::vec3 color = parseVecJson<3>(*elements.at(1));
+        glm::vec3 color = parseVecJson<3>(result.Get(0));
 
         return std::make_shared<SimpleGradientTexture>(color);
     }
 
     std::shared_ptr<Texture> parseImageTextureJson(const json& obj)
     {
-        std::vector<json::const_iterator> elements;
-        auto required = {"type", "path"};
-        findRequiredFields(obj, required, std::back_inserter(elements));
+        TypedObjectParser parser;
+        parser.RegisterField("path", JsonFieldType::String);
+        auto result = parser.Parse(obj);
 
-        if (!elements.at(1)->is_string())
-            throw std::runtime_error("");
-
-        std::string path = elements.at(1)->get<std::string>();
+        std::string path = result.Get<std::string>(0);
 
         if (!fs::is_regular_file(path))
             throw std::runtime_error("");
@@ -133,96 +68,66 @@ namespace
 
     Vertex parseVertexJson(const json& obj)
     {
-        if (!obj.is_object())
-            throw std::runtime_error("");
-
-        auto posIt = obj.find("pos");
-        auto texIt = obj.find("tex");
-
-        if (posIt == obj.end() || !posIt->is_array())
-            throw std::runtime_error("");
-
-        for (auto it = obj.begin(); it != obj.end(); it++)
-            if (it != posIt && it != texIt)
-                throw std::runtime_error("");
+        JsonObjectParser parser;
+        parser.RegisterField("pos", JsonFieldType::Array);
+        parser.RegisterField("tex", JsonFieldType::Array);
+        auto result = parser.Parse(obj);
 
         Vertex vertex{};
-
-        vertex.pos = parseVecJson<3>(*posIt);
-
-        if (texIt != obj.end())
-            vertex.texCoords = parseVecJson<2>(*texIt);
-        else
-            vertex.texCoords = glm::vec2(0.0f);
+        vertex.pos = parseVecJson<3>(result.Get(0));
+        vertex.texCoords = parseVecJson<2>(result.Get(1));
 
         return vertex;
     }
 
     void parseTriadJson(const json& obj, glm::u32vec3& indices, uint32_t& materialIndex)
     {
-        if (!obj.is_object())
-            throw std::runtime_error("");
+        JsonObjectParser parser;
+        parser.RegisterField("material-index", JsonFieldType::Integer);
+        parser.RegisterField("0", JsonFieldType::Integer);
+        parser.RegisterField("1", JsonFieldType::Integer);
+        parser.RegisterField("2", JsonFieldType::Integer);
+        auto result = parser.Parse(obj);
 
-        std::vector<json::const_iterator> elements;
-        auto required = {"material-index", "0", "1", "2"};
-        findRequiredFields(obj, required, std::back_inserter(elements));
-
-        for (auto it : elements) // if any of the elements is not an integer, throw
-            if (!it->is_number_integer())
-                throw std::runtime_error("");
-
-        materialIndex = elements.at(0)->get<uint32_t>();
-        indices = glm::u32vec3(elements.at(1)->get<uint32_t>(), elements.at(2)->get<uint32_t>(), elements.at(3)->get<uint32_t>());
-    }
-
-    const std::shared_ptr<Texture>& parseTextureIndexJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
-    {
-        if (!obj.is_number_integer())
-            throw std::runtime_error("");
-        
-        uint64_t index = obj.get<uint64_t>();
-        if (index >= textures.size())
-            throw std::runtime_error("");
-        return textures.at(index);
+        materialIndex = result.Get<uint32_t>(0);
+        indices = glm::u32vec3(result.Get<uint32_t>(1), result.Get<uint32_t>(2), result.Get<uint32_t>(3));
     }
 
     std::unique_ptr<Material> parseSimpleDiffuseMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        auto required = {"type", "diffuse-texture"};
-        std::vector<json::const_iterator> elements;
-        findRequiredFields(obj, required, std::back_inserter(elements));
+        TypedObjectParser parser;
+        parser.RegisterField("diffuse-texture", JsonFieldType::Integer);
+        auto result = parser.Parse(obj);
 
-        const auto& diffuse = parseTextureIndexJson(*elements.at(1), textures);
+        const auto& diffuse = textures.at(result.Get<uint64_t>(0));
 
         return std::make_unique<SimpleDiffuseMaterial>(diffuse);
     }
 
     std::unique_ptr<Material> parseSpecularCoatedMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        auto required = {"type", "diffuse-texture", "roughness-texture", "ior"};
-        std::vector<json::const_iterator> elements;
-        findRequiredFields(obj, required, std::back_inserter(elements));
+        TypedObjectParser parser;
+        parser.RegisterField("diffuse-texture", JsonFieldType::Integer);
+        parser.RegisterField("roughness-texture", JsonFieldType::Integer);
+        parser.RegisterField("ior", JsonFieldType::Number);
+        auto result = parser.Parse(obj);
 
-        const auto& diffuse = parseTextureIndexJson(*elements.at(1), textures);
-        const auto& roughness = parseTextureIndexJson(*elements.at(2), textures);
-        float ior = elements.at(3)->get<float>();
+        const auto& diffuse = textures.at(result.Get<uint64_t>(0));
+        const auto& roughness = textures.at(result.Get<uint64_t>(1));
+        float ior = result.Get<float>(2);
 
         return std::make_unique<SpecularCoatedMaterial>(diffuse, roughness, ior);
     }
 
     std::unique_ptr<Material> parseSimpleEmissiveMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        auto required = {"type", "emissive-texture", "multiplier"};
-        std::vector<json::const_iterator> elements;
-        findRequiredFields(obj, required, std::back_inserter(elements));
-
-        if (!elements.at(1)->is_number_integer())
-            throw std::runtime_error("");
-        if (!elements.at(2)->is_number())
-            throw std::runtime_error("");
+        TypedObjectParser parser;
+        parser.RegisterField("emissive-texture", JsonFieldType::Integer);
+        parser.RegisterField("multiplier", JsonFieldType::Number);
+        auto result = parser.Parse(obj);
         
-        const auto& emissive = parseTextureIndexJson(*elements.at(1), textures);
-        float multiplier = elements.at(2)->get<float>();
+        const auto& emissive = textures.at(result.Get<uint64_t>(0));
+        float multiplier = result.Get<float>(1);
 
         return std::make_unique<SimpleEmissiveMaterial>(emissive, multiplier);
     }
@@ -252,35 +157,18 @@ namespace
         std::back_insert_iterator<std::vector<Triad>> triadsInserter,
         std::optional<LightInfo>& lightInfo)
     {
-        if (!obj.is_object())
-            throw std::runtime_error("");
+        JsonObjectParser parser;
+        parser.RegisterField("type", JsonFieldType::String);
+        parser.RegisterField("surface-materials", JsonFieldType::Array);
+        parser.RegisterField("indices", JsonFieldType::Array);
+        auto result = parser.Parse(obj);
 
-        auto typeIt = obj.find("type");
-        if (typeIt == obj.end() || !typeIt->is_string())
+        std::string type = result.Get<std::string>(0);
+        if (type != "solid")
             throw std::runtime_error("");
-        std::string type = typeIt->get<std::string>();
-
-        std::vector<json::const_iterator> elements;
-        auto requiredTranslucent = {"type", "surface-materials", "indices", "ior"};
-        auto requiredSolid = {"type", "surface-materials", "indices"};
-        findRequiredFields(obj, type == "translucent" ? requiredTranslucent : requiredSolid, std::back_inserter(elements));
-
-        if (!elements.at(1)->is_array())
-            throw std::runtime_error("");
-        if (!elements.at(2)->is_array())
-            throw std::runtime_error("");
-        
-        auto iorIt = obj.find("ior");
-        float ior = 1.5f;
-        if (type == "translucent" && iorIt != obj.end())
-        {
-            if (!iorIt->is_number())
-                throw std::runtime_error("");
-            ior = iorIt->get<float>();
-        }
 
         std::vector<std::pair<glm::u32vec3, uint32_t>> indicesToMaterialIndex;
-        for (const json& obj : *elements.at(2))
+        for (const json& obj : result.Get(2))
         {
             std::pair<glm::u32vec3, uint32_t> pair;
             parseTriadJson(obj, pair.first, pair.second);
@@ -288,7 +176,7 @@ namespace
         }
 
         std::vector<std::unique_ptr<Material>> materials;
-        for (const json& obj : *elements.at(1))
+        for (const json& obj : result.Get(1))
         {
             materials.push_back(parseTypedJson<std::unique_ptr<Material>>(obj, typeNameToMaterialFactory, textures));
         }
@@ -345,25 +233,19 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& tran
     {
         jsonObj = json::parse(jsonStr);
     }
-    catch(const std::exception& e)
+    catch(const std::exception&)
     {
         throw std::runtime_error("");
     }
 
-    if (!jsonObj.is_object())
-        throw std::runtime_error("");
+    JsonObjectParser parser;
+    parser.RegisterField("textures", JsonFieldType::Array);
+    parser.RegisterField("primitives", JsonFieldType::Array);
+    parser.RegisterField("vertices", JsonFieldType::Array);
+    parser.RegisterField("cull-mode", JsonFieldType::String);
+    auto result = parser.Parse(jsonObj);
 
-    std::vector<json::const_iterator> elements;
-    auto required = {"textures", "primitives", "vertices", "cull-mode"};
-    findRequiredFields(jsonObj, required, std::back_inserter(elements));
-
-    if (std::find_if_not(elements.begin(), elements.begin() + 3, [](json::const_iterator element)
-        { return element->is_array(); }) != elements.begin() + 3)
-        throw std::runtime_error("");
-    if (!elements.at(3)->is_string())
-        throw std::runtime_error("");
-
-    std::string cullModeStr = elements.at(3)->get<std::string>();
+    std::string cullModeStr = result.Get<std::string>(3);
     CullMode cullMode;
     if (cullModeStr == "none")
         cullMode = CullMode::None;
@@ -375,17 +257,17 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& tran
         throw std::runtime_error("");
 
     std::vector<std::shared_ptr<Texture>> textures;
-    for (const json& obj : *elements.at(0))
+    for (const json& obj : result.Get(0))
         textures.push_back(parseTypedJson<std::shared_ptr<Texture>>(obj, typeNameToTextureFactory));
 
     std::vector<Vertex> vertices;
-    for (const json& obj : *elements.at(2))
+    for (const json& obj : result.Get(2))
         vertices.push_back(parseVertexJson(obj));
 
     std::vector<std::unique_ptr<Material>> materials;
     std::vector<Triad> triads;
     std::vector<LightInfo> lightInfos;
-    for (const json& obj : *elements.at(1))
+    for (const json& obj : result.Get(1))
     {
         std::optional<LightInfo> lightInfo;
         parsePrimitiveJson(obj, textures, vertices, std::back_inserter(materials), std::back_inserter(triads), lightInfo);

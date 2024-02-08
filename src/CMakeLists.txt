@@ -14,6 +14,7 @@ add_library(tracer
             ${PROJECT_SOURCE_DIR}/include/tracer/texture.h
             ${PROJECT_SOURCE_DIR}/include/tracer/tracer.h
             canvas.cpp
+            json_helper.h
             material.cpp
             mesh.cpp
             sampler.cpp
