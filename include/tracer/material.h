@@ -100,10 +100,13 @@ private:
 class PerfectSpecularCoatedMaterial : public SimpleReflectiveMaterial
 {
 public:
-    PerfectSpecularCoatedMaterial(const glm::vec3& albedo, float ior) : albedo(albedo), ior{ior} {}
+    PerfectSpecularCoatedMaterial(const std::shared_ptr<Texture>& albedo, float ior)
+        : albedoTexture(albedo), ior(ior) {}
+    PerfectSpecularCoatedMaterial(const glm::vec3& albedo, float ior)
+        : albedoTexture(std::make_shared<SimpleGradientTexture>(albedo)), ior{ior} {}
     virtual void SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const override;
 private:
-    glm::vec3 albedo;
+    std::shared_ptr<Texture> albedoTexture;
     float ior;
 };
 

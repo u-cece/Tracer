@@ -4,9 +4,10 @@
 #include <exception>
 #include <filesystem>
 #include <optional>
-#include <print>
 #include <ranges>
 #include <unordered_map>
+
+#include <fmt/core.h>
 
 #include "json_helper.h"
 #include "util.h"
@@ -132,13 +133,21 @@ namespace
         return std::make_unique<SimpleEmissiveMaterial>(emissive, multiplier);
     }
 
-    std::unique_ptr<Material> parsePerfectRefractiveMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
+    std::unique_ptr<Material> parsePerfectSpecularCoatedMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        return nullptr;
+        TypedObjectParser parser;
+        parser.RegisterField("diffuse-texture", JsonFieldType::Integer);
+        parser.RegisterField("ior", JsonFieldType::Number);
+        auto result = parser.Parse(obj);
+
+        const auto& diffuse = textures.at(result.Get<uint64_t>(0));
+        float ior = result.Get<float>(1);
+
+        return std::make_unique<PerfectSpecularCoatedMaterial>(diffuse, ior);
     }
 
     std::unordered_map<std::string, std::function<std::unique_ptr<Material>(const json&, const std::vector<std::shared_ptr<Texture>>&)>> typeNameToMaterialFactory
-    {{"SimpleDiffuse", parseSimpleDiffuseMaterialJson}, {"SpecularCoated", parseSpecularCoatedMaterialJson}, {"SimpleEmissive", parseSimpleEmissiveMaterialJson}, {"PerfectRefractive", parsePerfectRefractiveMaterialJson}};
+    {{"SimpleDiffuse", parseSimpleDiffuseMaterialJson}, {"SpecularCoated", parseSpecularCoatedMaterialJson}, {"SimpleEmissive", parseSimpleEmissiveMaterialJson}, {"PerfectSpecularCoated", parsePerfectSpecularCoatedMaterialJson}};
 
     std::unordered_map<
         std::string, std::function<
@@ -233,9 +242,9 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& tran
     {
         jsonObj = json::parse(jsonStr);
     }
-    catch(const std::exception&)
+    catch(std::exception& e)
     {
-        throw std::runtime_error("");
+        throw std::runtime_error(e.what());
     }
 
     JsonObjectParser parser;
@@ -315,16 +324,18 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
             vec2 t2 = v2.texCoords;
 
             vec2 coords;
-            std::optional<float> t;
+            float t;
             vec3 normal;
 
             if (cullMode == CullMode::None)
             {
-                t = intersectTriangleMT(orig, dir, p0, p1, p2, coords);
+                auto opt = intersectTriangleMT(orig, dir, p0, p1, p2, coords);
                 bool clockwise;
-                if (!(clockwise = t.has_value()))
-                    t = intersectTriangleCounterClockwiseMT(orig, dir, p0, p1, p2, coords);
-                if (!t)
+                if (!(clockwise = opt.has_value()))
+                    opt = intersectTriangleCounterClockwiseMT(orig, dir, p0, p1, p2, coords);
+                if (!opt)
+                    return std::nullopt;
+                if ((t = opt.value()) < 0.0f)
                     return std::nullopt;
                 normal = clockwise ?
                 cross(p2 - p0, p1 - p0) :
@@ -332,15 +343,19 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
             }
             else if (cullMode == CullMode::Back)
             {
-                t = intersectTriangleMT(orig, dir, p0, p1, p2, coords);
-                if (!t)
+                auto opt = intersectTriangleMT(orig, dir, p0, p1, p2, coords);
+                if (!opt)
+                    return std::nullopt;
+                if ((t = opt.value()) < 0.0f)
                     return std::nullopt;
                 normal = cross(p2 - p0, p1 - p0);
             }
             else if (cullMode == CullMode::Front)
             {
-                t = intersectTriangleCounterClockwiseMT(orig, dir, p0, p1, p2, coords);
-                if (!t)
+                auto opt = intersectTriangleCounterClockwiseMT(orig, dir, p0, p1, p2, coords);
+                if (!opt)
+                    return std::nullopt;
+                if ((t = opt.value()) < 0.0f)
                     return std::nullopt;
                 normal = cross(p1 - p0, p2 - p0);
             }
@@ -352,7 +367,7 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
             vec2 ac = t2 - t0;
             data.texCoords = t0 + ab * coords.x + ac * coords.y;
             data.material = triad.material;
-            return TriadIntersectionResult{data, t.value()};
+            return TriadIntersectionResult{data, t};
         }
     };
     struct TriadDistanceFunc
@@ -362,6 +377,36 @@ std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir
             return result.t;
         }
     };
+
+    // // linear intersection test
+    // TriadIntersectionFunc f{};
+    // f.cullMode = cullMode;
+
+    // bool intersected = false;
+    // float t = std::numeric_limits<float>::infinity();
+    // TriadIntersectionResult r{};
+    // for (const Triad& triad : triads)
+    // {
+    //     std::optional<TriadIntersectionResult> optionalResult = f(triad, orig, dir);
+    //     if (!optionalResult)
+    //         continue;
+
+    //     TriadIntersectionResult result = optionalResult.value();
+    //     if (result.t < 0.0f)
+    //         continue;
+
+    //     intersected = true;
+    //     if (result.t < t)
+    //     {
+    //         t = result.t;
+    //         r = result;
+    //     }
+    // }
+
+    // if (!intersected)
+    //     return std::nullopt;
+    // surfaceData = r.surfaceData;
+    // return t;
 
     std::optional<TriadIntersectionResult> result =
         accelStruct.Intersect(

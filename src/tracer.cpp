@@ -4,7 +4,8 @@
 #include <cassert>
 #include <chrono>
 #include <ctime>
-#include <print>
+#include <fmt/chrono.h>
+#include <fmt/core.h>
 #include <random>
 #include <ranges>
 #include <thread>
@@ -77,7 +78,7 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         }
 
         const SurfaceData& surface = hit.surfaceData;
-        vec3 point = hit.point;
+        vec3 point = orig + dir * hit.distance;
         vec3 normal = surface.normal;
         vec3 biasedP = point + normal * config.rayTrace.bias;
 
@@ -241,8 +242,8 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
         std::tm local{};
         localtime_s(&local, &time);
         std::chrono::hh_mm_ss formatter(std::chrono::hours(local.tm_hour) + std::chrono::minutes(local.tm_min) + std::chrono::seconds(local.tm_sec));
-        std::println("[{:%T}]: {} out of {} pixels completed ({:.2f}%); Estimated time remaining: {:02}:{:02}:{:02}",
-            formatter,
+        fmt::println("[{:%T}]: {} out of {} pixels completed ({:.2f}%); Estimated time remaining: {:02}:{:02}:{:02}",
+            fmt::localtime(time),
             nPixelsCompleted,
             nPixels,
             static_cast<double>(nPixelsCompleted) / static_cast<double>(nPixels) * 100.0,

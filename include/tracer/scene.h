@@ -8,6 +8,7 @@
 
 #include <glm/glm.hpp>
 
+#include "bvh.h"
 #include "object.h"
 
 namespace tracer
@@ -16,26 +17,35 @@ namespace tracer
 struct HitResult
 {
     bool valid;
-    glm::vec3 point;
     float distance;
     const Object* object;
 
     SurfaceData surfaceData;
 };
 
+struct ObjectPtrBoxFunc
+{
+    AABB operator()(const BoundedObject* obj) const
+    {
+        return obj->GetBox();
+    }
+};
+
 class Scene
 {
 public:
     static std::unique_ptr<Scene> Create(std::string_view path);
-    Scene() {}
     template <std::ranges::input_range Range>
         requires (
             std::is_same_v<
                 std::ranges::range_reference_t<Range>,
                 std::unique_ptr<Object>&&>)
-    void AddObjects(Range&& range)
+    static std::unique_ptr<Scene> Create(Range&& range)
     {
-        std::ranges::copy(range, std::back_inserter(objects));
+        std::unique_ptr scene = std::unique_ptr<Scene>(new Scene());
+        std::ranges::copy(range, std::back_inserter(scene->objects));
+        scene->Build();
+        return std::move(scene);
     }
     auto GetObjects() const
     {
@@ -46,7 +56,11 @@ public:
     }
     void Trace(const glm::vec3& orig, const glm::vec3& dir, HitResult& hitResult) const;
 private:
+    Scene() {}
+    void Build();
     std::vector<std::unique_ptr<Object>> objects;
+    std::vector<const Object*> unboundedObjects;
+    BVH<const BoundedObject*, ObjectPtrBoxFunc> bvh;
 };
-    
+
 }

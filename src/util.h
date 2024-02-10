@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <sstream>
 #include <optional>
 #include <string>
 
@@ -230,12 +231,10 @@ inline void sampleTriangleUniform(RNG& rng, const glm::vec3& p0, const glm::vec3
 
 inline std::string readTextFile(const std::string& path)
 {
-    std::ifstream stream(path, std::ios::ate);
-    size_t size = stream.tellg();
-    std::string str(size, '\0');
-    stream.seekg(0);
-    stream.read(str.data(), size);
-    return str;
+    std::ifstream stream(path);
+    std::ostringstream oss;
+    oss << stream.rdbuf();
+    return oss.str();
 }
 
 }

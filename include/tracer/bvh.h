@@ -63,13 +63,18 @@ public:
         topNode = buildFromNode(octree.GetTopNode());
     }
     bool IsBuilt() const { return topNode != nullptr; }
-private:
-    template <typename T>
-    struct optionalValueType : std::false_type {};
-    template <typename T>
-    struct optionalValueType<std::optional<T>> : std::true_type
+    AABB GetBox() const
     {
-        using type = T;
+        assert(IsBuilt());
+        return topNode->extent;
+    }
+private:
+    template <typename>
+    struct optionalValueType : std::false_type {};
+    template <typename OptionalType>
+    struct optionalValueType<std::optional<OptionalType>> : std::true_type
+    {
+        using type = OptionalType;
     };
 public:
     template <typename IntersectionFunc, typename DistanceFunc,
@@ -173,8 +178,10 @@ private:
                 node->objCount = 2;
                 node->extent = AABB(boxFunc(objects[0]), boxFunc(objects[1]));
             }
+#ifdef USING_MSVC
             else
                 std::unreachable();
+#endif
 
             return node;
         }
@@ -226,7 +233,11 @@ private:
             node->extent = AABB(left->extent, right->extent);
             return node;
         }
-        std::unreachable();
+#ifdef USING_MSVC
+            else
+                std::unreachable();
+#endif
+        return nullptr;
     }
     static void allocChildNodes(Node* node)
     {

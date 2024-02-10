@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <iostream>
 #include <memory>
-#include <print>
+#include <fmt/core.h>
 #include <ranges>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -36,6 +36,7 @@ int main()
     SimpleDiffuseMaterial greenDiffuse(green);
     SimpleEmissiveMaterial emissive(bright);
 
+    SimpleDiffuseMaterial diffuseMaterial(glm::vec3(0.73f));
     PerfectSpecularCoatedMaterial perfectSpecularCoatedMaterial(glm::vec3(0.73f), 1.5f);
     SimpleMirrorMaterial mirror;
     SpecularCoatedMaterial specularRed(red, makeColor(glm::vec3(0.1f)), 1.5f);
@@ -56,6 +57,12 @@ int main()
     back->SetMaterial(whiteDiffuse);
     std::unique_ptr ceiling = std::make_unique<Plane>(glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
     ceiling->SetMaterial(whiteDiffuse);
+
+    // floor->SetMaterial(diffuseMaterial);
+    // left->SetMaterial(diffuseMaterial);
+    // right->SetMaterial(diffuseMaterial);
+    // back->SetMaterial(diffuseMaterial);
+    // ceiling->SetMaterial(diffuseMaterial);
 
     floor->SetMaterial(perfectSpecularCoatedMaterial);
     left->SetMaterial(perfectSpecularCoatedMaterial);
@@ -84,9 +91,18 @@ int main()
     auto rightLight = Mesh::Create("light.json", transform);
 
     transform = glm::mat4(1.0f);
-    transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.5f));
-    transform = glm::rotate(transform, glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.0f));
+    transform = glm::rotate(transform, glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    auto floorLight = Mesh::Create("light.json", transform);
+
+    transform = glm::mat4(1.0f);
+    transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.4f));
+    transform = glm::translate(transform, glm::vec3(0.0f, 0.5f, 0.0f));
+    
+    transform = glm::translate(transform, glm::vec3(0.0f, 0.5f, 0.0f));
+    transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    transform = glm::translate(transform, glm::vec3(0.0f, -0.5f, 0.0f));
+
     transform = glm::scale(transform, glm::vec3(1.0f / 32.0f));
     auto creeper = Mesh::Create("creeper.json", transform);
 
@@ -110,6 +126,7 @@ int main()
     objects.push_back(std::move(backLight));
     objects.push_back(std::move(leftLight));
     objects.push_back(std::move(rightLight));
+    objects.push_back(std::move(floorLight));
 
     Camera camera{};
     // camera.yaw = glm::radians(0.0f);
@@ -117,29 +134,28 @@ int main()
     // camera.pos = glm::vec3(0.0f, 0.25f, -5.0f);
     camera.yaw = glm::radians(0.0f);
     camera.pitch = glm::radians(0.0f);
-    camera.pos = glm::vec3(0.0f, 1.0f, -4.0f);
+    camera.pos = glm::vec3(0.0f, 1.0f, -0.2f);
     Canvas canvas(1200, 800, 3);
-    Scene scene;
-    scene.AddObjects(objects | std::views::as_rvalue);
+    std::unique_ptr scene = Scene::Create(objects | std::views::as_rvalue);
     TracerConfiguration config{};
-    config.system.nThreads = 6u;
+    config.system.nThreads = 12u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nRaysPerPixel = 16u;
+    config.rayTrace.nRaysPerPixel = 1024u;
     config.rayTrace.nMinBounces = 8u;
     config.rayTrace.nMaxBounces = 16u;
     // config.lens.fov = glm::radians(90.0f);
     // config.lens.fov = glm::radians(30.0f);
-    LensConfiguration::fromLensParams(config.lens, 0.018f, 0.022f, 1.8f, 4.0f);
+    LensConfiguration::fromLensParams(config.lens, 0.018f, 0.022f, 1.8f, 0.5f);
     Tracer tracer(config);
 
     auto before = std::chrono::high_resolution_clock::now();
 
-    tracer.Render(canvas, camera, scene);
+    tracer.Render(canvas, camera, *scene);
 
     auto after = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration(after - before);
 
-    std::println("Time elapsed: {}ms", duration.count());
+    fmt::println("Time elapsed: {}ms", duration.count());
 
     canvas.SaveToPNG("out.png");
 

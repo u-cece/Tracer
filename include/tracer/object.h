@@ -6,6 +6,7 @@
 
 #include <glm/glm.hpp>
 
+#include "aabb.h"
 #include "emission_profile.h"
 #include "material.h"
 
@@ -66,7 +67,13 @@ private:
     // std::unordered_map<AttributeType, void_unique_ptr> attributes;
 };
 
-class SimpleMaterialObject : public Object
+class BoundedObject : virtual public Object
+{
+public:
+    virtual AABB GetBox() const = 0;
+};
+
+class SimpleMaterialObject : virtual public Object
 {
 public:
     SimpleMaterialObject() = default;
@@ -84,13 +91,17 @@ private:
     std::unique_ptr<Material> material;
 };
 
-class Sphere : public SimpleMaterialObject
+class Sphere : public SimpleMaterialObject, public BoundedObject
 {
 public:
     Sphere(const glm::vec3& origin, float radius)
         : origin(origin), radius{radius}, radiusSquared{radius * radius}
     {}
     std::optional<float> Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const override;
+    AABB GetBox() const override
+    {
+        return AABB(origin - glm::vec3(radius), origin + glm::vec3(radius));
+    }
 private:
     glm::vec3 origin;
     float radius;

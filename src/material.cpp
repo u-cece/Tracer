@@ -48,11 +48,11 @@ void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir,
     else
     {
         vec3 localSample;
-        float cosinePdf;
-        generateCosine(rng, localSample, cosinePdf);
-        vec3 cosineSample = transformLocalSampleToWorld(normal, localSample);
-        sample = cosineSample;
-        pdf = cosinePdf;
+        float generatedPdf;
+        generateCosine(rng, localSample, generatedPdf);
+        vec3 generatedSample = transformLocalSampleToWorld(normal, localSample);
+        sample = generatedSample;
+        pdf = generatedPdf;
     }
 
     brdf = texture->SampleOptional(texCoords) / pi<float>();
@@ -186,7 +186,7 @@ void PerfectSpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3&
         pdf = cosinePdf;
     }
 
-    brdf = albedo / pi<float>();
+    brdf = albedoTexture->SampleOptional(texCoords) / pi<float>();
 }
 
 }

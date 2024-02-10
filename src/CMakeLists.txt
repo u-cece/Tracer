@@ -29,6 +29,7 @@ target_compile_features(tracer PUBLIC cxx_std_23)
 
 target_link_libraries(tracer PUBLIC glm)
 target_link_libraries(tracer PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(tracer PRIVATE fmt::fmt)
 target_include_directories(tracer PRIVATE ${PROJECT_SOURCE_DIR}/dependencies/stb)
 
 target_compile_definitions(tracer PRIVATE

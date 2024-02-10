@@ -49,10 +49,14 @@ enum class CullMode // front = clockwise, back = counter-clockwise
     None, Front, Back
 };
 
-class Mesh : public Object
+class Mesh : public BoundedObject
 {
 public:
     static std::unique_ptr<Mesh> Create(std::string_view path, const glm::mat4& transformation = {});
+    AABB GetBox() const override
+    {
+        return accelStruct.GetBox();
+    }
     void Transform(const glm::mat4& matrix)
     {
         for (Triad& triad : triads)
