@@ -31,7 +31,7 @@ auto parseVecJson(const nlohmann::json& obj)
 }
 
 template <typename T, typename Container, typename... Args>
-T parseTypedJson(const nlohmann::json& obj, Container typeNameToFactory, Args... args)
+T parseTypedJson(const nlohmann::json& obj, Container typeNameToFactory, Args&&... args)
 {
     if (!obj.is_object())
         throw std::runtime_error("");
@@ -40,11 +40,15 @@ T parseTypedJson(const nlohmann::json& obj, Container typeNameToFactory, Args...
     if (typeIt == obj.end() || !typeIt->is_string())
         throw std::runtime_error("");
     
+    auto contentIt = obj.find("content");
+    if (contentIt == obj.end() || !contentIt->is_object())
+        throw std::runtime_error("");
+
     std::string type = typeIt->get<std::string>();
     if (!typeNameToFactory.contains(type))
         throw std::runtime_error("");
 
-    return typeNameToFactory.at(type)(obj, std::forward<Args>(args)...);
+    return typeNameToFactory.at(type)(*contentIt, std::forward<Args>(args)...);
 }
 
 enum class JsonFieldType
@@ -173,10 +177,10 @@ private:
     std::vector<std::string> ignoredFields;
 };
 
-class TypedObjectParser : public JsonObjectParser
-{
-public:
-    TypedObjectParser() : JsonObjectParser({"type"}) {}
-};
+// class TypedObjectParser : public JsonObjectParser
+// {
+// public:
+//     TypedObjectParser() : JsonObjectParser({"type"}) {}
+// };
 
 }

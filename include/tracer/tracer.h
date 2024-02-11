@@ -21,7 +21,7 @@ struct RayTraceConfiguration
     glm::vec3 environmentColor{0.0f};
     uint32_t nMinBounces = 3u;
     uint32_t nMaxBounces = 16u;
-    uint32_t nRaysPerPixel = 16u;
+    uint32_t nSamplesPerPixel = 16u;
 };
 
 struct LensConfiguration
