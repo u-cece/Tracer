@@ -61,13 +61,12 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
     vec3 orig = _Orig;
     vec3 dir = _Dir;
 
-    const Object* insideObj = nullptr;
+    float currentIor = 1.0f;
+    bool isInsideObject = false;
 
     uint32_t i = 0;
     while (true)
     {
-        bool inside = insideObj != nullptr;
-
         HitResult hit{};
         scene.Trace(orig, dir, hit);
 
@@ -80,7 +79,6 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         const SurfaceData& surface = hit.surfaceData;
         vec3 point = orig + dir * hit.distance;
         vec3 normal = surface.normal;
-        vec3 biasedP = point + normal * config.rayTrace.bias;
 
         const Material* material = hit.surfaceData.material;
         vec3 emissive;
@@ -119,7 +117,9 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         };
 
         vec3 sample;
-        bool generateNewRays = material->Shade(rng, dir, normal, surface.texCoords, emissionSample, emissionPdfFunc, sample, throughput, inside);
+        bool insidePrev = isInsideObject;
+        bool generateNewRays = material->Shade(rng, dir, normal, surface.texCoords, emissionSample, emissionPdfFunc, sample, throughput, currentIor, isInsideObject);
+        bool mediumChanged = insidePrev != isInsideObject;        
         if (!generateNewRays)
             break;
 
@@ -136,6 +136,11 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
             throughput *= 1.0f / p;
         }
         
+        vec3 biasedP = point;
+        if (mediumChanged)
+            biasedP -= normal * config.rayTrace.bias;
+        else
+            biasedP += normal * config.rayTrace.bias;
         orig = biasedP;
         dir = sample;
     }

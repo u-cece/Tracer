@@ -95,8 +95,12 @@ int main()
     auto floorLight = Mesh::Create("light.json", transform);
 
     transform = glm::mat4(1.0f);
-    transform = glm::translate(transform, glm::vec3(0.0f, 0.0f, 0.4f));
-    transform = glm::translate(transform, glm::vec3(0.0f, 0.5f, 0.0f));
+    transform = glm::translate(transform, glm::vec3(0.0f, 0.5f - 0.001f, 0.25f));
+    transform = glm::scale(transform, glm::vec3(1.0f));
+    auto cube = Mesh::Create("water_volume.json", transform);
+
+    transform = glm::mat4(1.0f);
+    transform = glm::translate(transform, glm::vec3(0.0f, 0.25f, 0.25f));
     
     transform = glm::translate(transform, glm::vec3(0.0f, 0.5f, 0.0f));
     transform = glm::rotate(transform, glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -122,11 +126,12 @@ int main()
     // objects.push_back(std::move(sphere2));
     // objects.push_back(std::move(sphere3));
     objects.push_back(std::move(creeper));
+    objects.push_back(std::move(cube));
     objects.push_back(std::move(ceilingLight));
     objects.push_back(std::move(backLight));
     objects.push_back(std::move(leftLight));
     objects.push_back(std::move(rightLight));
-    objects.push_back(std::move(floorLight));
+    // objects.push_back(std::move(floorLight));
 
     Camera camera{};
     // camera.yaw = glm::radians(0.0f);
@@ -134,18 +139,18 @@ int main()
     // camera.pos = glm::vec3(0.0f, 0.25f, -5.0f);
     camera.yaw = glm::radians(0.0f);
     camera.pitch = glm::radians(0.0f);
-    camera.pos = glm::vec3(0.0f, 1.0f, -0.2f);
+    camera.pos = glm::vec3(0.0f, 1.0f, -4.0f);
     Canvas canvas(1200, 800, 3);
     std::unique_ptr scene = Scene::Create(objects | std::views::as_rvalue);
     TracerConfiguration config{};
     config.system.nThreads = 12u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nSamplesPerPixel = 1u;
+    config.rayTrace.nSamplesPerPixel = 1024u;
     config.rayTrace.nMinBounces = 8u;
     config.rayTrace.nMaxBounces = 16u;
     // config.lens.fov = glm::radians(90.0f);
     // config.lens.fov = glm::radians(30.0f);
-    LensConfiguration::fromLensParams(config.lens, 0.018f, 0.022f, 1.8f, 0.5f);
+    LensConfiguration::fromLensParams(config.lens, 0.018f, 0.022f, 1.8f, 4.0f);
     Tracer tracer(config);
 
     auto before = std::chrono::high_resolution_clock::now();

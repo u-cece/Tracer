@@ -42,7 +42,7 @@ namespace
     std::shared_ptr<Texture> parsePlainColorTextureJson(const json& obj)
     {
         JsonObjectParser parser;
-        parser.RegisterField("color", JsonFieldType::String);
+        parser.RegisterField("value", JsonFieldType::String);
         auto result = parser.Parse(obj);
         
         glm::vec3 color = parseVecJson<3>(result.Get(0));
@@ -146,10 +146,18 @@ namespace
         return std::make_unique<PerfectSpecularCoatedMaterial>(diffuse, ior);
     }
 
-    std::unordered_map<std::string, std::function<std::unique_ptr<Material>(const json&, const std::vector<std::shared_ptr<Texture>>&)>> typeNameToMaterialFactory
+    std::unordered_map<std::string, std::function<std::unique_ptr<Material>(const json&, const std::vector<std::shared_ptr<Texture>>&)>> typeNameToReflectiveMaterialFactory
     {{"SimpleDiffuse", parseSimpleDiffuseMaterialJson}, {"SpecularCoated", parseSpecularCoatedMaterialJson}, {"SimpleEmissive", parseSimpleEmissiveMaterialJson}, {"PerfectSpecularCoated", parsePerfectSpecularCoatedMaterialJson}};
 
-    void parseSolidPrimitiveJson(const json& obj,
+    std::unique_ptr<Material> parseExposedMediumMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures, float mediumIor)
+    {
+        return std::make_unique<ExposedMediumMaterial>(mediumIor);
+    }
+
+    std::unordered_map<std::string, std::function<std::unique_ptr<Material>(const json&, const std::vector<std::shared_ptr<Texture>>&, float)>> typeNameToRefractiveMaterialFactory
+    {{"ExposedMedium", parseExposedMediumMaterialJson}};
+
+    void parseReflectivePrimitiveJson(const json& obj,
         const std::vector<std::shared_ptr<Texture>>& textures,
         const std::vector<Vertex>& vertices,
         std::back_insert_iterator<std::vector<std::unique_ptr<Material>>> materialsInserter,
@@ -173,7 +181,76 @@ namespace
         std::vector<std::unique_ptr<Material>> materials;
         for (const json& obj : result.Get(0))
         {
-            materials.push_back(parseTypedJson<std::unique_ptr<Material>>(obj, typeNameToMaterialFactory, textures));
+            materials.push_back(parseTypedJson<std::unique_ptr<Material>>(obj, typeNameToReflectiveMaterialFactory, textures));
+        }
+
+        std::vector<std::array<glm::vec3, 3>> emissiveTriads;
+
+        for (const auto& [indices, materialIndex] : indicesToMaterialIndex)
+        {
+            Triad triad{};
+            for (uint32_t i = 0; i < 3; i++)
+            {
+                uint32_t index = indices[i];
+                if (index >= vertices.size())
+                    throw std::runtime_error("");
+                triad.vertices.at(i) = vertices.at(index);
+            }
+            if (materialIndex >= materials.size())
+                throw std::runtime_error("");
+            triad.material = materials.at(materialIndex).get();
+            *triadsInserter = triad;
+
+            if (triad.material->IsEmissive())
+            {
+                std::array<glm::vec3, 3> triadPos;
+                for (uint32_t i = 0; i < 3; i++)
+                    triadPos.at(i) = triad.vertices.at(i).pos;
+                emissiveTriads.push_back(triadPos);
+            }
+        }
+
+        if (!emissiveTriads.empty())
+        {
+            LightInfo info{};
+            info.nTriads = static_cast<uint32_t>(emissiveTriads.size());
+            info.triads = std::make_unique<std::array<glm::vec3, 3>[]>(emissiveTriads.size());
+            for (uint32_t i = 0; i < info.nTriads; i++)
+            {
+                info.triads[i] = emissiveTriads.at(i);
+            }
+            lightInfo.emplace(std::move(info));
+        }
+
+        std::ranges::copy(materials | std::views::as_rvalue, materialsInserter);
+    }
+
+    void parseRefractivePrimitiveJson(const json& obj,
+        const std::vector<std::shared_ptr<Texture>>& textures,
+        const std::vector<Vertex>& vertices,
+        std::back_insert_iterator<std::vector<std::unique_ptr<Material>>> materialsInserter,
+        std::back_insert_iterator<std::vector<Triad>> triadsInserter,
+        std::optional<LightInfo>& lightInfo
+    )
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("surface-materials", JsonFieldType::Array);
+        parser.RegisterField("indices", JsonFieldType::Array);
+        parser.RegisterField("ior", JsonFieldType::Number);
+        auto result = parser.Parse(obj);
+
+        std::vector<std::pair<glm::u32vec3, uint32_t>> indicesToMaterialIndex;
+        for (const json& obj : result.Get(1))
+        {
+            std::pair<glm::u32vec3, uint32_t> pair;
+            parseTriadJson(obj, pair.first, pair.second);
+            indicesToMaterialIndex.push_back(pair);
+        }
+
+        std::vector<std::unique_ptr<Material>> materials;
+        for (const json& obj : result.Get(0))
+        {
+            materials.push_back(parseTypedJson<std::unique_ptr<Material>>(obj, typeNameToRefractiveMaterialFactory, textures, result.Get(2)));
         }
 
         std::vector<std::array<glm::vec3, 3>> emissiveTriads;
@@ -226,19 +303,7 @@ namespace
                 std::back_insert_iterator<std::vector<Triad>>,
                 std::optional<LightInfo>&
             )>> typeNameToPrimitiveFactory
-    {{"solid", parseSolidPrimitiveJson}};
-
-    void parsePrimitiveJson(const json& obj,
-        const std::vector<std::shared_ptr<Texture>>& textures,
-        const std::vector<Vertex>& vertices,
-        std::back_insert_iterator<std::vector<std::unique_ptr<Material>>> materialsInserter,
-        std::back_insert_iterator<std::vector<Triad>> triadsInserter,
-        std::optional<LightInfo>& lightInfo)
-    {
-        parseTypedJson<void>(obj, typeNameToPrimitiveFactory,
-            textures, vertices, materialsInserter, triadsInserter, lightInfo);
-    }
-
+    {{"reflective", parseReflectivePrimitiveJson}, {"refractive", parseRefractivePrimitiveJson}};
 }
 
 std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& transformation)
@@ -287,7 +352,7 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& tran
     for (const json& obj : result.Get(1))
     {
         std::optional<LightInfo> lightInfo;
-        parsePrimitiveJson(obj, textures, vertices, std::back_inserter(materials), std::back_inserter(triads), lightInfo);
+        parseTypedJson<void>(obj, typeNameToPrimitiveFactory, textures, vertices, std::back_inserter(materials), std::back_inserter(triads), lightInfo);
         if (lightInfo)
             lightInfos.push_back(std::move(lightInfo.value()));
     }

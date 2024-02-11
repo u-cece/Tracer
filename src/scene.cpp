@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "json_helper.h"
 #include "util.h"
 
 namespace tracer
@@ -18,13 +19,14 @@ std::unique_ptr<Scene> Scene::Create(std::string_view _path)
     {
         jsonObj = json::parse(jsonStr);
     }
-    catch(const std::exception&)
+    catch(std::exception& e)
     {
-        throw std::runtime_error("");
+        throw std::runtime_error(e.what());
     }
 
-    if (!jsonObj.is_object())
-        throw std::runtime_error("");
+    JsonObjectParser parser;
+    parser.RegisterField("objects", JsonFieldType::Array);
+    
 
     return nullptr;
 }

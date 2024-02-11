@@ -7,13 +7,13 @@
 namespace tracer
 {
 
-bool SimpleReflectiveMaterial::Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& wi, glm::vec3& attenuation, bool& inside) const
+bool ReflectiveMaterial::Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& wi, glm::vec3& attenuation, float& currentIor, bool& isInside) const
 {
     using namespace glm;
 
     float pdf;
     vec3 brdf;
-    SampleAndCalcBrdf(rng, rayDir, normal, texCoords, lightSample, lightSamplePdfFunc, wi, pdf, brdf);
+    SampleAndCalcBrdf(rng, rayDir, normal, texCoords, lightSample, lightSamplePdfFunc, wi, pdf, brdf, currentIor);
     float cosTerm = dot(wi, normal);
     if (cosTerm < 0.0f)
         cosTerm = 0.0f;
@@ -22,7 +22,7 @@ bool SimpleReflectiveMaterial::Shade(RNG& rng, const glm::vec3& rayDir, const gl
     return true;
 }
 
-void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf, float& currentIor) const
 {
     using namespace glm;
 
@@ -58,7 +58,7 @@ void SimpleDiffuseMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir,
     brdf = texture->SampleOptional(texCoords) / pi<float>();
 }
 
-void SimpleMirrorMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void SimpleMirrorMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf, float& currentIor) const
 {
     using namespace glm;
 
@@ -119,7 +119,45 @@ static float fresnel(float n, float cosine)
     return (r_s + r_p) / 2.0f;
 }
 
-void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+bool ExposedMediumMaterial::Shade(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& wi, glm::vec3& attenuation, float& currentIor, bool& isInside) const
+{
+    using namespace glm;
+
+    float n;
+    if (isInside) // going out
+        n = 1.0f / mediumIor;
+    else // going in
+        n = mediumIor;
+
+    float f = fresnel(n, dot(-rayDir, normal));
+
+    float cosTheta = dot(-rayDir, normal);
+    float sinTheta = sqrt(1.0f - cosTheta * cosTheta);
+
+    if (rng.Uniform() < f || n * sinTheta > 1.0f)
+    {
+        wi = reflect(rayDir, normal);
+        attenuation *= 1.0f;
+        return true;
+    }
+
+    if (isInside)
+    {
+        isInside = false;
+        currentIor = 1.0f;
+    }
+    else
+    {
+        isInside = true;
+        currentIor = mediumIor;
+    }
+    wi = refract(rayDir, normal, n);
+    attenuation *= 1.0f;
+
+    return true;
+}
+
+void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf, float& currentIor) const
 {
     using namespace glm;
 
@@ -136,18 +174,18 @@ void SpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir
 
     float g = gemetricShadowing(alpha, normal, half, -rayDir) * gemetricShadowing(alpha, normal, half, sample);
 
-    float f = fresnel(ior, dot(-rayDir, half));
+    float f = fresnel(ior / currentIor, dot(-rayDir, half));
 
     float specular = d * g * f / (4.0f * dot(-rayDir, normal) * dot(sample, normal));
 
     brdf = (1.0f - f) * albedo / pi<float>() + specular;
 }
 
-void PerfectSpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf) const
+void PerfectSpecularCoatedMaterial::SampleAndCalcBrdf(RNG& rng, const glm::vec3& rayDir, const glm::vec3& normal, const std::optional<glm::vec2>& texCoords, const std::optional<glm::vec3>& lightSample, const std::function<float(const glm::vec3&)>& lightSamplePdfFunc, glm::vec3& sample, float& pdf, glm::vec3& brdf, float& currentIor) const
 {
     using namespace glm;
 
-    float f = fresnel(ior, dot(-rayDir, normal));
+    float f = fresnel(ior / currentIor, dot(-rayDir, normal));
 
     if (rng.Uniform() < f)
     {
