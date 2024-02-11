@@ -23,7 +23,7 @@ namespace
 
     std::shared_ptr<Texture> parseGradientTextureJson(const json& obj)
     {
-        TypedObjectParser parser;
+        JsonObjectParser parser;
         parser.RegisterField("top-left", JsonFieldType::Array);
         parser.RegisterField("top-right", JsonFieldType::Array);
         parser.RegisterField("bottom-right", JsonFieldType::Array);
@@ -41,7 +41,7 @@ namespace
 
     std::shared_ptr<Texture> parsePlainColorTextureJson(const json& obj)
     {
-        TypedObjectParser parser;
+        JsonObjectParser parser;
         parser.RegisterField("color", JsonFieldType::String);
         auto result = parser.Parse(obj);
         
@@ -52,7 +52,7 @@ namespace
 
     std::shared_ptr<Texture> parseImageTextureJson(const json& obj)
     {
-        TypedObjectParser parser;
+        JsonObjectParser parser;
         parser.RegisterField("path", JsonFieldType::String);
         auto result = parser.Parse(obj);
 
@@ -96,7 +96,7 @@ namespace
 
     std::unique_ptr<Material> parseSimpleDiffuseMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        TypedObjectParser parser;
+        JsonObjectParser parser;
         parser.RegisterField("diffuse-texture", JsonFieldType::Integer);
         auto result = parser.Parse(obj);
 
@@ -107,7 +107,7 @@ namespace
 
     std::unique_ptr<Material> parseSpecularCoatedMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        TypedObjectParser parser;
+        JsonObjectParser parser;
         parser.RegisterField("diffuse-texture", JsonFieldType::Integer);
         parser.RegisterField("roughness-texture", JsonFieldType::Integer);
         parser.RegisterField("ior", JsonFieldType::Number);
@@ -122,7 +122,7 @@ namespace
 
     std::unique_ptr<Material> parseSimpleEmissiveMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        TypedObjectParser parser;
+        JsonObjectParser parser;
         parser.RegisterField("emissive-texture", JsonFieldType::Integer);
         parser.RegisterField("multiplier", JsonFieldType::Number);
         auto result = parser.Parse(obj);
@@ -135,7 +135,7 @@ namespace
 
     std::unique_ptr<Material> parsePerfectSpecularCoatedMaterialJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures)
     {
-        TypedObjectParser parser;
+        JsonObjectParser parser;
         parser.RegisterField("diffuse-texture", JsonFieldType::Integer);
         parser.RegisterField("ior", JsonFieldType::Number);
         auto result = parser.Parse(obj);
@@ -149,35 +149,21 @@ namespace
     std::unordered_map<std::string, std::function<std::unique_ptr<Material>(const json&, const std::vector<std::shared_ptr<Texture>>&)>> typeNameToMaterialFactory
     {{"SimpleDiffuse", parseSimpleDiffuseMaterialJson}, {"SpecularCoated", parseSpecularCoatedMaterialJson}, {"SimpleEmissive", parseSimpleEmissiveMaterialJson}, {"PerfectSpecularCoated", parsePerfectSpecularCoatedMaterialJson}};
 
-    std::unordered_map<
-        std::string, std::function<
-            void(
-                const json&,
-                const std::vector<std::shared_ptr<Texture>>&,
-                const std::vector<Vertex>&, std::back_insert_iterator<std::vector<std::unique_ptr<Material>>>,
-                std::back_insert_iterator<std::vector<Triad>>,
-                std::optional<LightInfo>&
-            )>> typeNameToPrimitiveFactory
-    {};
-
-    void parsePrimitiveJson(const json& obj, const std::vector<std::shared_ptr<Texture>>& textures,
+    void parseSolidPrimitiveJson(const json& obj,
+        const std::vector<std::shared_ptr<Texture>>& textures,
         const std::vector<Vertex>& vertices,
         std::back_insert_iterator<std::vector<std::unique_ptr<Material>>> materialsInserter,
         std::back_insert_iterator<std::vector<Triad>> triadsInserter,
-        std::optional<LightInfo>& lightInfo)
+        std::optional<LightInfo>& lightInfo
+    )
     {
         JsonObjectParser parser;
-        parser.RegisterField("type", JsonFieldType::String);
         parser.RegisterField("surface-materials", JsonFieldType::Array);
         parser.RegisterField("indices", JsonFieldType::Array);
         auto result = parser.Parse(obj);
 
-        std::string type = result.Get<std::string>(0);
-        if (type != "solid")
-            throw std::runtime_error("");
-
         std::vector<std::pair<glm::u32vec3, uint32_t>> indicesToMaterialIndex;
-        for (const json& obj : result.Get(2))
+        for (const json& obj : result.Get(1))
         {
             std::pair<glm::u32vec3, uint32_t> pair;
             parseTriadJson(obj, pair.first, pair.second);
@@ -185,7 +171,7 @@ namespace
         }
 
         std::vector<std::unique_ptr<Material>> materials;
-        for (const json& obj : result.Get(1))
+        for (const json& obj : result.Get(0))
         {
             materials.push_back(parseTypedJson<std::unique_ptr<Material>>(obj, typeNameToMaterialFactory, textures));
         }
@@ -229,6 +215,28 @@ namespace
         }
 
         std::ranges::copy(materials | std::views::as_rvalue, materialsInserter);
+    }
+
+    std::unordered_map<
+        std::string, std::function<
+            void(
+                const json&,
+                const std::vector<std::shared_ptr<Texture>>&,
+                const std::vector<Vertex>&, std::back_insert_iterator<std::vector<std::unique_ptr<Material>>>,
+                std::back_insert_iterator<std::vector<Triad>>,
+                std::optional<LightInfo>&
+            )>> typeNameToPrimitiveFactory
+    {{"solid", parseSolidPrimitiveJson}};
+
+    void parsePrimitiveJson(const json& obj,
+        const std::vector<std::shared_ptr<Texture>>& textures,
+        const std::vector<Vertex>& vertices,
+        std::back_insert_iterator<std::vector<std::unique_ptr<Material>>> materialsInserter,
+        std::back_insert_iterator<std::vector<Triad>> triadsInserter,
+        std::optional<LightInfo>& lightInfo)
+    {
+        parseTypedJson<void>(obj, typeNameToPrimitiveFactory,
+            textures, vertices, materialsInserter, triadsInserter, lightInfo);
     }
 
 }

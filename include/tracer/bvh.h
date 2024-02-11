@@ -70,9 +70,9 @@ public:
     }
 private:
     template <typename>
-    struct optionalValueType : std::false_type {};
+    struct optionalValueType {};
     template <typename OptionalType>
-    struct optionalValueType<std::optional<OptionalType>> : std::true_type
+    struct optionalValueType<std::optional<OptionalType>>
     {
         using type = OptionalType;
     };

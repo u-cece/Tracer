@@ -194,7 +194,7 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
             createCoordSystemWithUpVec(camLookVec, axis1, axis2); // coord system of the defocus disk
             vec3 focusPoint = toFustumPlane * config.lens.focalPlaneDistance; // get the focus point on the focal plane by pushing the frustum plane out
 
-            for (uint32_t _ = 0; _ < config.rayTrace.nRaysPerPixel; _++)
+            for (uint32_t _ = 0; _ < config.rayTrace.nSamplesPerPixel; _++)
             {
                 float r1 = rng.Uniform();
                 float r2 = rng.Uniform();
@@ -208,7 +208,7 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
                     accumColor += rayColor;
             }
 
-            accumColor /= config.rayTrace.nRaysPerPixel;
+            accumColor /= config.rayTrace.nSamplesPerPixel;
 
             color = accumColor;
 

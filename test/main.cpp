@@ -140,7 +140,7 @@ int main()
     TracerConfiguration config{};
     config.system.nThreads = 12u;
     config.rayTrace.environmentColor = glm::vec3(1.0f);
-    config.rayTrace.nRaysPerPixel = 1024u;
+    config.rayTrace.nSamplesPerPixel = 1u;
     config.rayTrace.nMinBounces = 8u;
     config.rayTrace.nMaxBounces = 16u;
     // config.lens.fov = glm::radians(90.0f);
