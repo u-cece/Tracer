@@ -1,6 +1,9 @@
 #include <tracer/scene.h>
 
+#include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
+
+#include <tracer/mesh.h>
 
 #include "json_helper.h"
 #include "util.h"
@@ -9,6 +12,118 @@ namespace tracer
 {
 
 using json = nlohmann::json;
+
+namespace
+{
+    glm::mat4 parseMatrixTransformationJson(const json& obj)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("value", JsonFieldType::Array);
+        auto result = parser.Parse(obj);
+
+        const json& valueObj = result.Get(0);
+        if (valueObj.size() != 16u)
+            throw std::runtime_error("");
+        
+        glm::mat4 transformation;
+        for (uint32_t i = 0; i < 4; i++)
+            for (uint32_t j = 0; j < 4; j++)
+            {
+                const json& element = valueObj[i + j * 4]; // row major
+                if (!element.is_number())
+                    throw std::runtime_error("");
+                transformation[i][j] = element.get<float>(); // to column major
+            }
+        return transformation;
+    }
+
+    glm::mat4 parseTranslationTransformationJson(const json& obj)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("value", JsonFieldType::Array);
+        auto result = parser.Parse(obj);
+
+        glm::vec3 value = parseVecJson<3>(result.Get(0));
+        return glm::translate(glm::mat4(1.0f), value);
+    }
+
+    glm::mat4 parseScaleTransformationJson(const json& obj)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("value", JsonFieldType::Array);
+        auto result = parser.Parse(obj);
+
+        glm::vec3 value = parseVecJson<3>(result.Get(0));
+        return glm::scale(glm::mat4(1.0f), value);
+    }
+
+    glm::mat4 parseRotationTransformationJson(const json& obj)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("angle", JsonFieldType::Number);
+        parser.RegisterField("axis", JsonFieldType::Array);
+        auto result = parser.Parse(obj);
+        
+        float angle = result.Get(0);
+        glm::vec3 axis = parseVecJson<3>(result.Get(1));
+        return glm::rotate(glm::mat4(1.0f), glm::radians(angle), axis);
+    }
+
+    std::unordered_map<std::string, std::function<glm::mat4(const json&)>> typeNameToTransformationFactory
+    {
+        {"matrix", parseMatrixTransformationJson},
+        {"translation", parseTranslationTransformationJson},
+        {"scale", parseScaleTransformationJson},
+        {"rotation", parseRotationTransformationJson}
+    };
+
+    std::unique_ptr<Object> parseInlineMeshObjectJson(const json& obj, const glm::mat4& transformation)
+    {
+        return Mesh::Create(&obj, transformation);
+    }
+
+    std::unique_ptr<Object> parseFileMeshObjectJson(const json& obj, const glm::mat4& transformation)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("path", JsonFieldType::String);
+        auto result = parser.Parse(obj);
+
+        std::string path = result.Get(0);
+        return Mesh::Create(path, transformation);
+    }
+
+    std::unordered_map<std::string, std::function<std::unique_ptr<Object>(const json&, const glm::mat4&)>> typeNameToMeshFactory
+    {
+        {"inline", parseInlineMeshObjectJson},
+        {"file", parseFileMeshObjectJson}
+    };
+
+    std::unique_ptr<Object> parseMeshObjectJson(const json& obj, const glm::mat4& transformation)
+    {
+        return parseTypedJson<std::unique_ptr<Object>>(obj, typeNameToMeshFactory, transformation);
+    }
+
+    std::unordered_map<std::string, std::function<std::unique_ptr<Object>(const json&, const glm::mat4&)>> typeNameToObjectFactory
+    {
+        {"mesh", parseMeshObjectJson}
+    };
+
+    std::unique_ptr<Object> parseObjectJson(const json& obj)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("transformations", JsonFieldType::Array);
+        parser.RegisterField("object", JsonFieldType::Object);
+        auto result = parser.Parse(obj);
+        
+        glm::mat4 transformation = glm::mat4(1.0f);
+        for (const json& transformationObj : result.Get(0))
+            transformation = transformation * parseTypedJson<glm::mat4>(transformationObj, typeNameToTransformationFactory);
+
+        const json& objectObj = result.Get(1);
+        return parseTypedJson<std::unique_ptr<Object>>(objectObj, typeNameToObjectFactory, transformation);
+    }
+
+}
 
 std::unique_ptr<Scene> Scene::Create(std::string_view _path)
 {
@@ -26,9 +141,15 @@ std::unique_ptr<Scene> Scene::Create(std::string_view _path)
 
     JsonObjectParser parser;
     parser.RegisterField("objects", JsonFieldType::Array);
-    
+    auto result = parser.Parse(jsonObj);
 
-    return nullptr;
+    std::unique_ptr scene = std::unique_ptr<Scene>(new Scene());
+    for (const json& obj : result.Get(0))
+        scene->objects.push_back(parseObjectJson(obj));
+    
+    scene->Build();
+
+    return scene;
 }
 
 void Scene::Build()

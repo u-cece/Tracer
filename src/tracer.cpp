@@ -72,7 +72,7 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
 
         if (!hit.valid)
         {
-            color += throughput * config.rayTrace.environmentColor;
+            color += throughput * config.rayTrace.ambientColor;
             break;
         }
 

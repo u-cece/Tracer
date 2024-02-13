@@ -52,7 +52,12 @@ enum class CullMode // front = clockwise, back = counter-clockwise
 class Mesh : public BoundedObject
 {
 public:
+    static std::unique_ptr<Mesh> Create(const void* jsonObj, const glm::mat4& transformation = {});
     static std::unique_ptr<Mesh> Create(std::string_view path, const glm::mat4& transformation = {});
+    static std::unique_ptr<Mesh> Create(const char* path, const glm::mat4& transformation = {})
+    {
+        return Create(std::string_view(path), transformation);
+    }
     AABB GetBox() const override
     {
         return accelStruct.GetBox();

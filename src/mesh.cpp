@@ -306,19 +306,10 @@ namespace
     {{"reflective", parseReflectivePrimitiveJson}, {"refractive", parseRefractivePrimitiveJson}};
 }
 
-std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& transformation)
+
+std::unique_ptr<Mesh> Mesh::Create(const void* jsonObjPtr, const glm::mat4& transformation)
 {
-    std::string path(_path);
-    std::string jsonStr = readTextFile(path);
-    json jsonObj;
-    try
-    {
-        jsonObj = json::parse(jsonStr);
-    }
-    catch(std::exception& e)
-    {
-        throw std::runtime_error(e.what());
-    }
+    const json& jsonObj = *reinterpret_cast<const json*>(jsonObjPtr);
 
     JsonObjectParser parser;
     parser.RegisterField("textures", JsonFieldType::Array);
@@ -366,6 +357,23 @@ std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& tran
     mesh->Transform(transformation);
 
     return mesh;
+}
+
+std::unique_ptr<Mesh> Mesh::Create(std::string_view _path, const glm::mat4& transformation)
+{
+    std::string path(_path);
+    std::string jsonStr = readTextFile(path);
+    json jsonObj;
+    try
+    {
+        jsonObj = json::parse(jsonStr);
+    }
+    catch(std::exception& e)
+    {
+        throw std::runtime_error(e.what());
+    }
+
+    return Create(&jsonObj, transformation);
 }
 
 std::optional<float> Mesh::Intersect(const glm::vec3& orig, const glm::vec3& dir, SurfaceData& surfaceData) const

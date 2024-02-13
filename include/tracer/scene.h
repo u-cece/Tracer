@@ -45,7 +45,7 @@ public:
         std::unique_ptr scene = std::unique_ptr<Scene>(new Scene());
         std::ranges::copy(range, std::back_inserter(scene->objects));
         scene->Build();
-        return std::move(scene);
+        return scene;
     }
     auto GetObjects() const
     {
