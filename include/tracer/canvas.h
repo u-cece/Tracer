@@ -13,11 +13,18 @@ namespace tracer
 class Canvas
 {
 public:
+    Canvas() = default;
     Canvas(uint32_t width, uint32_t height, uint32_t channel)
-        :
-        width(width), height(height), channelCount(channel),
-        data(std::make_unique<uint8_t[]>(getDataSize()))
-    {}
+    {
+        SetBuffer(width, height, channel);
+    }
+    void SetBuffer(uint32_t width, uint32_t height, uint32_t channel)
+    {
+        this->width = width;
+        this->height = height;
+        this->channelCount = channel;
+        data = std::make_unique<uint8_t[]>(getDataSize());
+    }
     void Store(uint32_t w, uint32_t h, uint32_t channel, uint8_t byte)
     {
         data[getIndex(w, h, channel)] = byte;
@@ -50,7 +57,7 @@ private:
         assert(w < width && h < height);
         return (h * width + w) * channelCount + channel;
     }
-    const uint32_t width, height, channelCount;
+    uint32_t width, height, channelCount;
     std::unique_ptr<uint8_t[]> data;
 };
 

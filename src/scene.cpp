@@ -123,6 +123,105 @@ namespace
         return parseTypedJson<std::unique_ptr<Object>>(objectObj, typeNameToObjectFactory, transformation);
     }
 
+    Lens parseRawParamsLensJson(const json& obj)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("fov", JsonFieldType::Number);
+        parser.RegisterField("defocus-disk-radius", JsonFieldType::Number);
+        parser.RegisterField("focal-point-distance", JsonFieldType::Number);
+        auto result = parser.Parse(obj);
+
+        Lens lens{};
+        lens.fov = result.Get(0);
+        lens.defocusDiskRadius = result.Get(1);
+        lens.focalPointDistance = result.Get(2);
+
+        return lens;
+    }
+
+    Lens parseCameraParamsLensJson(const json& obj)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("focal-length", JsonFieldType::Number);
+        parser.RegisterField("sensor-size", JsonFieldType::Number);
+        parser.RegisterField("f-stop", JsonFieldType::Number);
+        parser.RegisterField("focal-point-distance", JsonFieldType::Number);
+        auto result = parser.Parse(obj);
+
+        float focalLength = result.Get(0);
+        float sensorSize = result.Get(1);
+        float fStop = result.Get(2);
+        float focalPointDistance = result.Get(3);
+
+        Lens lens{};
+        lens.fov = 2.0f * atan(sensorSize / (2.0f * focalLength));
+        lens.defocusDiskRadius = focalLength / fStop / 2.0f;
+        lens.focalPointDistance = focalPointDistance;
+
+        return lens;
+    }
+
+    std::unordered_map<std::string, std::function<Lens(const json&)>> typeNameToLensFactory
+    {
+        {"raw-params", parseRawParamsLensJson},
+        {"camera-params", parseCameraParamsLensJson}
+    };
+
+    glm::vec3 parseLookAtDirection(const json& obj, const glm::vec3& cameraPos)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("value", JsonFieldType::Array);
+        auto result = parser.Parse(obj);
+
+        glm::vec3 lookAt = parseVecJson<3>(result.Get(0));
+        glm::vec3 dir = glm::normalize(lookAt - cameraPos);
+        return dir;
+    }
+
+    glm::vec3 parseAxesDirection(const json& obj, const glm::vec3& cameraPos)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("yaw", JsonFieldType::Number);
+        parser.RegisterField("pitch", JsonFieldType::Number);
+        auto result = parser.Parse(obj);
+
+        float yaw = result.Get(0);
+        float pitch = result.Get(1);
+        yaw = glm::radians(yaw);
+        pitch = glm::radians(pitch);
+
+        glm::vec3 dir
+        (
+            sin(yaw) * cos(pitch),
+            sin(pitch),
+            cos(yaw) * cos(pitch)
+        );
+        dir = glm::normalize(dir);
+        return dir;
+    }
+
+    std::unordered_map<std::string, std::function<glm::vec3(const json&, const glm::vec3&)>> typeNameToDirectionFactory
+    {
+        {"look-at", parseLookAtDirection},
+        {"axes", parseAxesDirection}
+    };
+
+    Camera parseCameraJson(const json& obj)
+    {
+        JsonObjectParser parser;
+        parser.RegisterField("position", JsonFieldType::Array);
+        parser.RegisterField("direction", JsonFieldType::Object);
+        parser.RegisterField("lens", JsonFieldType::Object);
+        auto result = parser.Parse(obj);
+
+        Camera camera{};
+        camera.pos = parseVecJson<3>(result.Get(0));
+        camera.dir = parseTypedJson<glm::vec3>(result.Get(1), typeNameToDirectionFactory, camera.pos);
+        camera.lens = parseTypedJson<Lens>(result.Get(2), typeNameToLensFactory);
+
+        return camera;
+    }
+
 }
 
 std::unique_ptr<Scene> Scene::Create(std::string_view _path)
@@ -140,19 +239,25 @@ std::unique_ptr<Scene> Scene::Create(std::string_view _path)
     }
 
     JsonObjectParser parser;
+    parser.RegisterField("camera", JsonFieldType::Object);
     parser.RegisterField("objects", JsonFieldType::Array);
+    parser.RegisterField("ambient-color", JsonFieldType::Array);
     auto result = parser.Parse(jsonObj);
 
     std::unique_ptr scene = std::unique_ptr<Scene>(new Scene());
-    for (const json& obj : result.Get(0))
+
+    scene->camera = parseCameraJson(result.Get(0));
+
+    for (const json& obj : result.Get(1))
         scene->objects.push_back(parseObjectJson(obj));
-    
-    scene->Build();
+    scene->buildAccel();
+
+    scene->ambientColor = parseVecJson<3>(result.Get(2));
 
     return scene;
 }
 
-void Scene::Build()
+void Scene::buildAccel()
 {
     bvh.Build(objects
         | std::views::transform([](const std::unique_ptr<Object>& obj) { return obj.get(); })

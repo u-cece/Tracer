@@ -18,33 +18,22 @@ struct SystemConfiguration
 struct RayTraceConfiguration
 {
     float bias = 1e-4f;
-    glm::vec3 ambientColor{0.0f};
     uint32_t nMinBounces = 3u;
     uint32_t nMaxBounces = 16u;
     uint32_t nSamplesPerPixel = 16u;
 };
 
-struct LensConfiguration
-{
-    float fov = glm::radians(90.0f);
-    float defocusDiskRadius = 0.0f;
-    float focalPlaneDistance = 1.0f;
-
-    static void fromLensParams(LensConfiguration& config, float focalLength, float sensorSize, float fStop, float focusPoint)
-    {
-        using namespace glm;
-
-        config.fov = 2.0f * atan(sensorSize / (2.0f * focalLength));
-        config.defocusDiskRadius = focalLength / fStop / 2.0f;
-        config.focalPlaneDistance = focusPoint;
-    }
-};
-
 struct TracerConfiguration
 {
-    SystemConfiguration system{};
-    RayTraceConfiguration rayTrace{};
-    LensConfiguration lens{};
+    uint32_t nThreads = 4u;
+
+    uint32_t width;
+    uint32_t height;
+
+    float bias = 1e-4f;
+    uint32_t nMinBounces = 3u;
+    uint32_t nMaxBounces = 16u;
+    uint32_t nSamplesPerPixel = 16u;
 };
 
 class Tracer
@@ -54,7 +43,7 @@ public:
     {}
     Tracer() : config{}
     {}
-    void Render(Canvas& canvas, const Camera& camera, const Scene& scene);
+    void Render(Canvas& canvas, const Scene& scene);
 private:
     TracerConfiguration config;
     RNG rng;

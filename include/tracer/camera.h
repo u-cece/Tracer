@@ -5,10 +5,18 @@
 namespace tracer
 {
 
+struct Lens
+{
+    float fov;
+    float defocusDiskRadius;
+    float focalPointDistance;
+};
+
 struct Camera
 {
     glm::vec3 pos;
-    float yaw, pitch;
+    glm::vec3 dir;
+    Lens lens;
 };
 
 }

@@ -20,19 +20,6 @@
 namespace tracer
 {
 
-static glm::vec3 calcLookVec(float yaw, float pitch)
-{
-    using namespace glm;
-
-    vec3 camLookVec
-    (
-        sin(yaw) * cos(pitch),
-        sin(pitch),
-        cos(yaw) * cos(pitch)
-    );
-    return normalize(camLookVec);
-}
-
 static glm::vec3 calcToFrustumPlane(const glm::vec2& on2DFrustumPlane, const glm::vec3& lookVec, float fov)
 {
     using namespace glm;
@@ -72,7 +59,7 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
 
         if (!hit.valid)
         {
-            color += throughput * config.rayTrace.ambientColor;
+            color += throughput * scene.GetAmbientColor();
             break;
         }
 
@@ -123,10 +110,10 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         if (!generateNewRays)
             break;
 
-        if (i++ == config.rayTrace.nMaxBounces)
+        if (i++ == config.nMaxBounces)
             break;
 
-        if (i > config.rayTrace.nMinBounces)
+        if (i > config.nMinBounces)
         {
             // russian roulette
             float p = max(throughput.r, max(throughput.g, throughput.b));
@@ -138,20 +125,22 @@ static glm::vec3 castRay(const glm::vec3& _Orig, const glm::vec3& _Dir, const Sc
         
         vec3 biasedP = point;
         if (mediumChanged)
-            biasedP -= normal * config.rayTrace.bias;
+            biasedP -= normal * config.bias;
         else
-            biasedP += normal * config.rayTrace.bias;
+            biasedP += normal * config.bias;
         orig = biasedP;
         dir = sample;
     }
     return color;
 }
 
-void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
+void Tracer::Render(Canvas& canvas, const Scene& scene)
 {
-    assert(canvas.GetChannelCount() == 3);
-
     using namespace glm;
+    
+    canvas.SetBuffer(config.width, config.height, 3u);
+
+    Camera camera = scene.GetCamera();
 
     std::vector<std::unique_ptr<EmissionProfile>> emissionProfiles;
     for (const Object* obj : scene.GetObjects())
@@ -162,7 +151,7 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
     u32vec2 dim(canvas.GetWidth(), canvas.GetHeight());
     uint64_t nPixels = dim.x * dim.y;
 
-    std::vector<std::thread> threadPool(config.system.nThreads);
+    std::vector<std::thread> threadPool(config.nThreads);
     std::atomic_uint64_t pixel;
 
     auto callable = [&, this]
@@ -189,22 +178,22 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
                 vec2(ndc.x         , ndc.y / aspect) :
                 vec2(ndc.x * aspect, ndc.y         );
 
-            vec3 camLookVec = calcLookVec(camera.yaw, camera.pitch);
-            vec3 toFustumPlane = calcToFrustumPlane(onFrustumPlane2D, camLookVec, config.lens.fov);
+            vec3 camLookVec = camera.dir;
+            vec3 toFustumPlane = calcToFrustumPlane(onFrustumPlane2D, camLookVec, camera.lens.fov);
             
             vec3 color(0.0f);
             vec3 accumColor(0.0f);
 
             vec3 axis1, axis2;
             createCoordSystemWithUpVec(camLookVec, axis1, axis2); // coord system of the defocus disk
-            vec3 focusPoint = toFustumPlane * config.lens.focalPlaneDistance; // get the focus point on the focal plane by pushing the frustum plane out
+            vec3 focusPoint = toFustumPlane * camera.lens.focalPointDistance; // get the focus point on the focal plane by pushing the frustum plane out
 
-            for (uint32_t _ = 0; _ < config.rayTrace.nSamplesPerPixel; _++)
+            for (uint32_t _ = 0; _ < config.nSamplesPerPixel; _++)
             {
                 float r1 = rng.Uniform();
                 float r2 = rng.Uniform();
                 vec2 diskSample = samplePointOnDisk(r1, r2);
-                vec3 defocused = (diskSample.x * axis1 + diskSample.y * axis2) * config.lens.defocusDiskRadius;
+                vec3 defocused = (diskSample.x * axis1 + diskSample.y * axis2) * camera.lens.defocusDiskRadius;
                 
                 vec3 rayColor = castRay(camera.pos + defocused, normalize(focusPoint - defocused), scene, config, rng, emissionProfiles);
                 if (!std::isnan(rayColor.x) &&
@@ -213,7 +202,7 @@ void Tracer::Render(Canvas& canvas, const Camera& camera, const Scene& scene)
                     accumColor += rayColor;
             }
 
-            accumColor /= config.rayTrace.nSamplesPerPixel;
+            accumColor /= config.nSamplesPerPixel;
 
             color = accumColor;
 
